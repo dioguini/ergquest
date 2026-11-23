@@ -226,6 +226,7 @@ class PlacesAndMapTest(unittest.TestCase):
         self.assertIn('class="route"', page)
         self.assertIn("OpenStreetMap", page)
         self.assertIn("prefers-color-scheme:dark", page)
+        self.assertNotIn("<html", page)
 
 
 class TrainerGradeTest(unittest.TestCase):

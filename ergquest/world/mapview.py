@@ -21,11 +21,14 @@ def _color(edge) -> str:
     return next(c for lim, c, _ in GRADE_BANDS if steep < lim)
 
 
-def render(graph: CityGraph, title: str, route: list[tuple[int, bool]] | None = None) -> str:
+def render(graph: CityGraph, title: str, route: list[tuple[int, bool]] | None = None,
+           labels: list[tuple[str, float, float]] | None = None, route_label: str = "") -> str:
+    """Página do mapa (conteúdo sem esqueleto HTML: abre num browser e publica-se como está)."""
     xs = [x for e in graph.edges.values() for x, _ in e.points] or [0, 1]
     ys = [y for e in graph.edges.values() for _, y in e.points] or [0, 1]
     pad = 40
-    minx, maxx, miny, maxy = min(xs) - pad, max(xs) + pad, min(ys) - pad, max(ys) + pad
+    lx = [x + 30 + 22 * len(n) for n, x, _ in labels or []]
+    minx, maxx, miny, maxy = min(xs) - pad, max([*xs, *lx]) + pad, min(ys) - pad, max(ys) + pad
     w, h = maxx - minx, maxy - miny
 
     def pts(points):
@@ -50,41 +53,55 @@ def render(graph: CityGraph, title: str, route: list[tuple[int, bool]] | None = 
         label = html.escape(ANCHOR_LABEL.get(a.kind, a.kind))
         out.append(f'<circle class="anchor {a.kind}" cx="{a.x - minx:.1f}" cy="{maxy - a.y:.1f}" r="5"><title>{label}</title></circle>')
 
+    for name, x, y in labels or []:
+        cx, cy = x - minx, maxy - y
+        out.append(f'<g class="label"><circle cx="{cx:.1f}" cy="{cy:.1f}" r="9"/>'
+                   f'<text x="{cx + 14:.1f}" y="{cy + 6:.1f}">{html.escape(name)}</text></g>')
+
     st = graph.stats()
     legend = "".join(f'<span><i style="background:{c}"></i>{t}</span>' for _, c, t in GRADE_BANDS)
     facts = (f"{st['junctions']} interseções · {st['bike_km']} km de bicicleta · {st['foot_km']} km a pé · "
              f"altitude {st['ele_min']}–{st['ele_max']} m · rampa máx. {st['steepest_pct']} % · "
              f"{st['docks']} docas · {st['anchors']} âncoras")
-    return f"""<!doctype html>
-<html lang="pt"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{html.escape(title)}</title>
+    route_key = f'<span><i class="rk"></i>{html.escape(route_label)}</span>' if route and route_label else ""
+    return f"""<title>{html.escape(title)}</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Space+Grotesk:wght@600&display=swap">
 <style>
-:root{{--bg:#f6f4ef;--fg:#1d1d1b;--muted:#6b6b66;--water:#4a90c2;--route:#1d1d1b;--dock:#4a90c2;--anchor:#c2410c;
---g0:#9aa39a;--g1:#d9b44a;--g2:#e07b39;--g3:#c2410c;--g4:#7f1d1d}}
-@media (prefers-color-scheme:dark){{:root:not([data-theme="light"]){{--bg:#151514;--fg:#ecebe6;--muted:#9a9a94;
---water:#5fa8d8;--route:#ecebe6;--dock:#5fa8d8;--anchor:#fb923c;--g0:#5d655d;--g1:#c9a23a;--g2:#e58a4b;--g3:#f06a3a;--g4:#ff9a8a}}}}
-:root[data-theme="dark"]{{--bg:#151514;--fg:#ecebe6;--muted:#9a9a94;--water:#5fa8d8;--route:#ecebe6;--dock:#5fa8d8;
---anchor:#fb923c;--g0:#5d655d;--g1:#c9a23a;--g2:#e58a4b;--g3:#f06a3a;--g4:#ff9a8a}}
-body{{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 system-ui,sans-serif}}
-main{{max-width:1100px;margin:0 auto;padding:16px}}
-h1{{font-size:1.3rem;margin:0 0 4px}} p{{margin:0 0 10px;color:var(--muted)}}
-svg{{width:100%;height:auto;display:block}}
+/* mapa a toda a largura; cabeçalho curto; legenda por baixo */
+:root{{--bg:#f4f5f2;--fg:#1b1f1d;--muted:#5f6862;--water:#3f86b8;--route:#9d174d;--dock:#3f86b8;--anchor:#b4532a;
+--g0:#a3aba5;--g1:#d4a63a;--g2:#df7a35;--g3:#c2410c;--g4:#7c1d1d;
+--display:"Space Grotesk",system-ui,sans-serif;--body:Inter,system-ui,sans-serif}}
+@media (prefers-color-scheme:dark){{:root:not([data-theme="light"]){{--bg:#121514;--fg:#e8ebe8;--muted:#9aa39d;
+--water:#5aa5d6;--route:#f472b6;--dock:#5aa5d6;--anchor:#f0905a;--g0:#56605a;--g1:#c99d33;--g2:#e88a4c;--g3:#f26b3a;--g4:#ff9c8c;color-scheme:dark}}}}
+:root[data-theme="dark"]{{--bg:#121514;--fg:#e8ebe8;--muted:#9aa39d;--water:#5aa5d6;--route:#f472b6;--dock:#5aa5d6;
+--anchor:#f0905a;--g0:#56605a;--g1:#c99d33;--g2:#e88a4c;--g3:#f26b3a;--g4:#ff9c8c;color-scheme:dark}}
+body{{background:var(--bg);color:var(--fg);font:15px/1.5 var(--body)}}
+main{{max-width:1200px;margin:0 auto;padding-block:20px 28px;
+padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:10px}}
+h1{{font:600 1.5rem/1.2 var(--display);margin:0;text-wrap:balance}}
+p{{margin:0;color:var(--muted);font-variant-numeric:tabular-nums}}
+.map{{overflow-x:auto}} svg{{width:100%;min-width:640px;height:auto;display:block}}
 .street{{fill:none;stroke-width:4;stroke-linecap:round;stroke-linejoin:round}}
-.steps{{stroke-dasharray:3 4}} .water{{fill:none;stroke:var(--water);stroke-width:6;opacity:.6}}
-.route{{fill:none;stroke:var(--route);stroke-width:2;stroke-dasharray:8 5}}
-.dock{{fill:none;stroke:var(--dock);stroke-width:2.5}} .anchor{{fill:var(--anchor)}}
-.legend{{display:flex;flex-wrap:wrap;gap:12px;font-size:13px;color:var(--muted);margin:8px 0}}
-.legend i{{display:inline-block;width:18px;height:4px;margin-right:6px;vertical-align:middle}}
-small{{color:var(--muted)}}
-</style></head><body><main>
+.steps{{stroke-dasharray:3 4}} .water{{fill:none;stroke:var(--water);stroke-width:7;opacity:.55}}
+.route{{fill:none;stroke:var(--route);stroke-width:11;stroke-linecap:round;stroke-linejoin:round;opacity:.9}}
+.dock{{fill:none;stroke:var(--dock);stroke-width:2.5}} .anchor{{fill:var(--anchor);opacity:.8}}
+.label circle{{fill:var(--bg);stroke:var(--fg);stroke-width:3}}
+.label text{{font:600 40px var(--display);fill:var(--fg);paint-order:stroke;stroke:var(--bg);stroke-width:6px}}
+.legend{{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted)}}
+.legend i{{display:inline-block;width:18px;height:4px;margin-right:6px;vertical-align:middle;border-radius:2px}}
+.legend .rk{{background:var(--route);height:5px}}
+small{{color:var(--muted);font-size:12px}}
+</style>
+<main>
 <h1>{html.escape(title)}</h1><p>{facts}</p>
-<div class="legend">{legend}<span>┄ escadinhas (só a pé)</span><span>◯ doca</span><span>● estabelecimento</span></div>
-<svg viewBox="0 0 {w:.0f} {h:.0f}" role="img" aria-label="Mapa da zona">{''.join(out)}</svg>
-<small>Dados {html.escape(graph.to_json()['attribution'])}</small>
-</main></body></html>"""
+<div class="legend">{legend}<span>┄ escadinhas (só a pé)</span><span>◯ doca</span><span>● estabelecimento</span>{route_key}</div>
+<div class="map"><svg viewBox="0 0 {w:.0f} {h:.0f}" role="img" aria-label="Mapa da zona com as ruas coloridas pelo declive">{''.join(out)}</svg></div>
+<small>Dados {html.escape(graph.attribution)}</small>
+</main>"""
 
 
-def save(graph: CityGraph, path: str | Path, title: str, route=None) -> Path:
+def save(graph: CityGraph, path: str | Path, title: str, route=None, labels=None, route_label: str = "") -> Path:
     p = Path(path)
-    p.write_text(render(graph, title, route), encoding="utf-8")
+    p.write_text(render(graph, title, route, labels, route_label), encoding="utf-8")
     return p
