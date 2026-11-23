@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.idea/
+*.fit
+dist/
+build/
+data/raw/
+data/*.html
