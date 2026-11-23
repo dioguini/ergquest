@@ -64,10 +64,10 @@ class ProgressionTest(unittest.TestCase):
         p = progression.Profile("x", 70)
         self.assertTrue(p.city_unlocked("lisboa"))
         self.assertFalse(p.city_unlocked("london"))
-        self.assertEqual(p.zones_unlocked("lisboa"), ["baixa"])
+        self.assertEqual(p.zones_unlocked("lisboa"), ["n-baixa"])
         p.xp, p.active_weeks_last8 = progression.xp_for_level(12), 4
         self.assertTrue(p.city_unlocked("london"))
-        self.assertIn("oriente", p.zones_unlocked("lisboa"))
+        self.assertIn("n-este", p.zones_unlocked("lisboa"))
 
     def test_jobs_unlock_establishments(self):
         from ergquest.game.missions import sources_for
@@ -114,35 +114,35 @@ class ChaseTest(unittest.TestCase):
 
 class SessionTest(unittest.TestCase):
     def test_swap_bike_to_run_parks_bike(self):
-        p = PlayerState("a", "lisboa", "baixa")
+        p = PlayerState("a", "lisboa", "n-baixa")
         p.start(Sport.BIKE, 0)
         old, new = p.swap(Sport.RUN, 600)
         self.assertEqual((old.sport, old.ended_at, new.sport), (Sport.BIKE, 600, Sport.RUN))
-        self.assertEqual(p.parked_bike, ("lisboa", "baixa"))
+        self.assertEqual(p.parked_bike, ("lisboa", "n-baixa"))
 
     def test_rowing_needs_a_dock_and_gym_is_offworld(self):
-        p = PlayerState("a", "lisboa", "baixa")
+        p = PlayerState("a", "lisboa", "n-baixa")
         with self.assertRaises(SessionError):
             p.start(Sport.ROW, 0)
         with self.assertRaises(SessionError):
             p.start(Sport.GYM, 0)
-        p.zone, p.at_dock = "ribeira", True
+        p.zone, p.at_dock = "n-centro", True
         self.assertEqual(p.start(Sport.ROW, 0).sport, Sport.ROW)
 
     def test_training_on_screen_needs_no_dock(self):
-        p = PlayerState("a", "lisboa", "baixa")
+        p = PlayerState("a", "lisboa", "n-baixa")
         s = p.start(Sport.ROW, 0, Mode.TRAINING, training=TrainingSetup(erg=True, venue=Venue.SCREEN))
         self.assertFalse(s.in_world)
 
     def test_training_mode_requires_setup(self):
-        p = PlayerState("a", "lisboa", "baixa")
+        p = PlayerState("a", "lisboa", "n-baixa")
         with self.assertRaises(SessionError):
             p.start(Sport.BIKE, 0, Mode.TRAINING)
         with self.assertRaises(SessionError):
             p.start(Sport.BIKE, 0, Mode.MISSION, training=TrainingSetup(False, Venue.WORLD))
 
     def test_cannot_swap_with_active_missions(self):
-        p = PlayerState("a", "lisboa", "baixa")
+        p = PlayerState("a", "lisboa", "n-baixa")
         p.start(Sport.BIKE, 0, Mode.MISSION)
         with self.assertRaises(SessionError):
             p.swap(Sport.RUN, 10, active_missions=1)
@@ -152,7 +152,7 @@ class ChallengeTest(unittest.TestCase):
     def setUp(self):
         self.low = progression.Profile("low", 70)
         self.high = progression.Profile("high", 70, xp=progression.xp_for_level(15), active_weeks_last8=5)
-        self.s_low = PlayerState("low", "lisboa", "baixa")
+        self.s_low = PlayerState("low", "lisboa", "n-baixa")
         self.s_high = PlayerState("high", "london", "city")
 
     def test_cross_level_and_cross_city(self):

@@ -71,3 +71,6 @@ class DemoTest(unittest.TestCase):
         self.assertEqual(res["trust"], 1.0)
         self.assertGreater(res["compliance"], 90)
         self.assertTrue(res["errand"])
+        self.assertIn("Zona Oeste", res["limit"])                # a sessão livre encontrou o limite
+        self.assertEqual(res["bridge"], "Ponte 25 de Abril")
+        self.assertIsNotNone(res["cross_dest"])

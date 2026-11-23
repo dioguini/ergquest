@@ -78,7 +78,7 @@
 | Sensores simulados | Testes, *bots* de carga e NPCs. |
 | Ficheiros `.fit` (escrever/ler), treinos `.zwo/.mrc/.erg` | Exportar para Strava, Garmin, TrainingPeaks. |
 | Zonas, curva de potência, picos | Categorias W/kg e anti-cheat. |
-| Mapas: grafo OSM + DEM, navegação, mapa 2D | `ergquest/world/` — feito; falta correr sobre os dados reais. |
+| Mapas: grafo OSM + DEM, navegação, zonas e limites, mapa | `ergquest/world/` — feito para a Área Metropolitana de Lisboa (docs/MUNDO.md). |
 | Registo de ginásio | Alimenta a Robustez. |
 | Motor de recomendações | Prescreve os treinos e ajusta-se à carga que o jogo gerou. |
 | Cliente gráfico: mundo 3D, HUD, telemóvel, mapa | Fase 1 em Python/pyglet. |
@@ -124,11 +124,18 @@ ergquest/
     navigation.py  rota mais rápida (física), posição, escolha nas interseções
     places.py      estabelecimentos fictícios em sítios reais
     mapview.py     mapa 2D (HTML/SVG)
-    zones.py       caixas geográficas das zonas
+    zones.py       caixas geográficas (zonas pequenas, tools/build_zone.py)
+    metro.py       Área Metropolitana: margens, zonas, ordem, pontes, remo, serras
+    metrobuild.py  Overture → grafo; ligações nas extremidades; serras; rio e docas
+    access.py      o que cada nível pode usar (zonas, pontes, travessias)
+    jobs.py        destinos de trabalhos, incluindo a outra margem para experientes
+    metromap.py    mapa interativo (canvas) da Área Metropolitana
   server/
     anticheat.py   validação da telemetria
   demo.py          um dia em Lisboa, sem hardware
 tools/
-  build_zone.py    descarrega OSM + DEM e constrói data/<zona>.json e .html
+  build_zone.py    uma zona pequena a partir do Overpass (OSM) + DEM
+  overture.py      leitura seletiva do Overture Maps (S3) por caixa geográfica
+  build_metro.py   constrói data/lisboa-metro.json.gz e o mapa interativo
 tests/
 ```

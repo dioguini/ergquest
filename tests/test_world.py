@@ -62,7 +62,7 @@ class OsmTest(unittest.TestCase):
         self.assertFalse(ways[103].bike_ok())
         self.assertTrue(ways[103].foot_ok())
         self.assertEqual(ways[104].oneway_for_bike(), 1)
-        self.assertFalse(ways[106].bike_ok() or ways[106].foot_ok())
+        self.assertTrue(ways[106].bike_ok() and ways[106].foot_ok())     # autoestradas contam neste mundo
         self.assertEqual(len(d.water_edges), 1)
 
     def test_query_mentions_bbox(self):
@@ -105,7 +105,7 @@ class GraphTest(unittest.TestCase):
     def test_junctions_and_edges(self):
         self.assertEqual(set(self.g.junctions), {1, 2, 3, 4, 5, 6})
         names = sorted(e.name for e in self.g.edges.values())
-        self.assertNotIn("Via Rápida", names)
+        self.assertIn("Via Rápida", names)
         self.assertEqual(names.count("Avenida Ribeirinha"), 2)          # cortada em B
 
     def test_real_gradient_and_ascent(self):

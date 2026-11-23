@@ -163,10 +163,19 @@ anula o trabalho e custa reputação (mais se já levava a comida ou o passageir
 
 ---
 
-## 5. Mundo *endless* com cidades reais
-- Ruas e rios do OpenStreetMap (licença ODbL, exige atribuição). Altimetria de um DEM público (Copernicus GLO-30 ou SRTM).
-- Os estabelecimentos são fictícios e gerados por semente sobre os edifícios reais. A mesma semente dá a mesma cidade a todos.
-- Os pedidos, recados e corridas de táxi geram-se a partir do grafo e nunca se esgotam.
+## 5. O mundo: a Área Metropolitana de Lisboa
+O mapa jogável é a Área Metropolitana inteira (ver [MUNDO.md](MUNDO.md)):
+- nove zonas que abrem por ordem, começando na Baixa;
+- as pontes, que abrem com a margem sul para os atletas com bastante nível;
+- o rio dividido em zonas de remo, que acompanham a terra, com travessias entre
+  margens para os remadores experientes;
+- nas extremidades, estradas de ligação: não há becos no fim do mundo;
+- duas serras fictícias para treinar subida longa (20 km a 10 %) e um colo curto
+  (4 km a 9 %).
+
+Numa sessão livre, os limites aparecem como ruas bloqueadas, com meia-volta e
+regresso pelo GPS. Os estabelecimentos são fictícios e ficam em sítios reais.
+Londres e Nova Iorque ficam para depois, com o mesmo processo.
 
 ## 6. Anti-cheat
 Validação no servidor (`server/anticheat.py`), com cinco verificações:
@@ -185,4 +194,9 @@ e vai para revisão; nunca há ban automático.
 3. **Treino no ecrã dá XP?** Assumi que sim (pelo esforço). A alternativa é só o treino no mundo contar para o jogo.
 4. **Táxi a pé?** Assumi riquexó e bote-táxi. A corrida fica com recados e polícia.
 5. **Registo do ginásio:** manual, importado (Garmin), ou ambos?
-6. **Modelo de negócio** e **primeira cidade jogável** (proponho Lisboa: Baixa → Chiado → Castelo, e o Tejo).
+6. **Modelo de negócio.**
+7. **Ordem de desbloqueio** (docs/MUNDO.md §1). Assumi Norte: Baixa → Centro →
+   Norte → Este → **Oeste**; depois Sul: Norte → Sul → Este → Oeste. O Oeste norte
+   não estava na sequência pedida, e na margem sul foi pedida uma "zona centro"
+   que não está entre as quatro zonas definidas. É uma lista em `metro.ZONES`:
+   mudar a ordem é mudar uma linha.

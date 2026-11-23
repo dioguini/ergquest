@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import gzip
 import json
 import math
 from dataclasses import dataclass, field
@@ -39,6 +40,7 @@ class Junction:
     y: float
     ele: float
     dock: bool = False
+    zone: str = ""
 
 
 @dataclass
@@ -54,8 +56,14 @@ class Edge:
     bike: bool
     foot: bool
     oneway: int = 0                           # bicicleta: 1 só a→b, -1 só b→a
+    mode: str = "road"                        # road | water | dock (cais entre a terra e a água)
+    lock: str = ""                            # ponte ou travessia que tem de estar desbloqueada
 
     def allows(self, sport: str, forward: bool) -> bool:
+        if sport == "row":
+            return self.mode in ("water", "dock")
+        if self.mode != "road":
+            return False
         if sport == "run":
             return self.foot
         if sport == "bike":
@@ -91,15 +99,24 @@ class CityGraph:
 
     def index(self) -> None:
         self.__dict__.pop("_networks", None)
+        self.__dict__.pop("_grid_cache", None)
         self._adj = {j: [] for j in self.junctions}
         for e in self.edges.values():
             self._adj[e.a].append((e.id, True))
             self._adj[e.b].append((e.id, False))
 
-    def outgoing(self, junction: int, sport: str) -> list[tuple[Edge, bool]]:
-        """Ruas que se podem tomar a partir de uma interseção, neste desporto."""
-        return [(self.edges[eid], fwd) for eid, fwd in self._adj.get(junction, [])
-                if self.edges[eid].allows(sport, fwd)]
+    def outgoing(self, junction: int, sport: str, access=None) -> list[tuple[Edge, bool]]:
+        """Ruas que se podem tomar a partir de uma interseção, neste desporto.
+
+        Com `access` (ver `world.access`), só as que levam a zonas abertas e
+        não passam por pontes ou travessias ainda bloqueadas.
+        """
+        out = []
+        for eid, fwd in self._adj.get(junction, []):
+            e = self.edges[eid]
+            if e.allows(sport, fwd) and (access is None or access.can_use(self, e, fwd)):
+                out.append((e, fwd))
+        return out
 
     def end_of(self, edge: Edge, forward: bool) -> int:
         return edge.b if forward else edge.a
@@ -140,11 +157,48 @@ class CityGraph:
             cache[sport] = best
         return cache[sport]
 
-    def nearest(self, x: float, y: float, sport: str | None = None) -> Junction:
-        """Interseção mais próxima; com `sport`, só na rede principal desse desporto."""
-        cands = (self.junctions.values() if sport is None
-                 else [self.junctions[j] for j in self.main_network(sport)])
-        return min(cands, key=lambda j: (j.x - x) ** 2 + (j.y - y) ** 2)
+    GRID_M = 250.0
+
+    def _grid(self) -> dict[tuple[int, int], list[int]]:
+        grid = self.__dict__.get("_grid_cache")
+        if grid is None:
+            grid = {}
+            for j in self.junctions.values():
+                grid.setdefault((int(j.x // self.GRID_M), int(j.y // self.GRID_M)), []).append(j.id)
+            self.__dict__["_grid_cache"] = grid
+            xs = [i for i, _ in grid] or [0]
+            ys = [k for _, k in grid] or [0]
+            self.__dict__["_grid_bounds"] = (min(xs), max(xs), min(ys), max(ys))
+        return grid
+
+    def nearest(self, x: float, y: float, sport: str | None = None, within: float | None = None,
+                where=None) -> Junction | None:
+        """Interseção mais próxima (índice em grelha); com `sport`, só na rede
+        principal desse desporto; `where(j)` filtra; `within` limita a distância."""
+        allowed = self.main_network(sport) if sport else None
+        grid, g = self._grid(), self.GRID_M
+        cx, cy = int(x // g), int(y // g)
+        best, best_d = None, math.inf
+        max_r = int((within or 1e9) // g) + 1
+        x0, x1, y0, y1 = self.__dict__["_grid_bounds"]
+        span = max(abs(cx - x0), abs(cx - x1)) + max(abs(cy - y0), abs(cy - y1))
+        for r in range(0, min(max_r, span + 1) + 1):
+            if best is not None and (r - 1) * g > math.sqrt(best_d):
+                break
+            for i in range(cx - r, cx + r + 1):
+                for k in (range(cy - r, cy + r + 1) if i in (cx - r, cx + r) else (cy - r, cy + r)):
+                    for jid in grid.get((i, k), ()):
+                        if allowed is not None and jid not in allowed:
+                            continue
+                        j = self.junctions[jid]
+                        if where is not None and not where(j):
+                            continue
+                        d = (j.x - x) ** 2 + (j.y - y) ** 2
+                        if d < best_d:
+                            best, best_d = j, d
+        if best is None or (within is not None and best_d > within * within):
+            return None
+        return best
 
     def stats(self) -> dict:
         bike = sum(e.length for e in self.edges.values() if e.bike)
@@ -154,19 +208,21 @@ class CityGraph:
         return {"junctions": len(self.junctions), "edges": len(self.edges),
                 "bike_km": round(bike / 1000, 2), "foot_km": round(foot / 1000, 2),
                 "ele_min": round(min(eles), 1) if eles else None, "ele_max": round(max(eles), 1) if eles else None,
-                "steepest_pct": round(steep, 1), "docks": len(self.docks()), "anchors": len(self.anchors)}
+                "steepest_pct": round(steep, 1), "docks": len(self.docks()), "anchors": len(self.anchors),
+                "water_km": round(sum(e.length for e in self.edges.values() if e.mode == "water") / 1000, 1)}
 
     # ------------------------------------------------------------ ficheiro
     def to_json(self) -> dict:
         return {
             "attribution": self.attribution,
             "projection": [self.projection.lat0, self.projection.lon0],
-            "junctions": [[j.id, round(j.x, 2), round(j.y, 2), round(j.ele, 1), int(j.dock)]
+            "junctions": [[j.id, round(j.x, 1), round(j.y, 1), round(j.ele, 1), int(j.dock), j.zone]
                           for j in self.junctions.values()],
             "edges": [{"id": e.id, "a": e.a, "b": e.b, "name": e.name, "hw": e.highway,
                        "pts": [[round(x, 1), round(y, 1)] for x, y in e.points],
                        "len": round(e.length, 1), "prof": [[round(l, 1), round(g, 2)] for l, g in e.profile],
-                       "bike": int(e.bike), "foot": int(e.foot), "ow": e.oneway} for e in self.edges.values()],
+                       "bike": int(e.bike), "foot": int(e.foot), "ow": e.oneway, "mode": e.mode, "lock": e.lock}
+                      for e in self.edges.values()],
             "anchors": [[a.kind, a.junction, round(a.x, 1), round(a.y, 1)] for a in self.anchors],
             "water": [[[round(x, 1), round(y, 1)] for x, y in line] for line in self.water],
         }
@@ -174,11 +230,12 @@ class CityGraph:
     @classmethod
     def from_json(cls, d: dict) -> "CityGraph":
         g = cls(Projection(*d["projection"]))
-        for jid, x, y, ele, dock in d["junctions"]:
-            g.junctions[jid] = Junction(jid, x, y, ele, bool(dock))
+        for jid, x, y, ele, dock, *rest in d["junctions"]:
+            g.junctions[jid] = Junction(jid, x, y, ele, bool(dock), rest[0] if rest else "")
         for e in d["edges"]:
             g.edges[e["id"]] = Edge(e["id"], e["a"], e["b"], e["name"], e["hw"], [tuple(p) for p in e["pts"]],
-                                    e["len"], [tuple(p) for p in e["prof"]], bool(e["bike"]), bool(e["foot"]), e["ow"])
+                                    e["len"], [tuple(p) for p in e["prof"]], bool(e["bike"]), bool(e["foot"]), e["ow"],
+                                    e.get("mode", "road"), e.get("lock", ""))
         g.anchors = [Anchor(k, j, x, y) for k, j, x, y in d.get("anchors", [])]
         g.water = [[tuple(p) for p in line] for line in d.get("water", [])]
         g.attribution = d.get("attribution", ATTRIBUTION)
@@ -186,11 +243,16 @@ class CityGraph:
         return g
 
     def save(self, path: str | Path) -> None:
-        Path(path).write_text(json.dumps(self.to_json(), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+        """Grava em JSON (comprimido se o nome acabar em .gz)."""
+        raw = json.dumps(self.to_json(), ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        p = Path(path)
+        p.write_bytes(gzip.compress(raw, 9) if p.suffix == ".gz" else raw)
 
     @classmethod
     def load(cls, path: str | Path) -> "CityGraph":
-        return cls.from_json(json.loads(Path(path).read_text(encoding="utf-8")))
+        p = Path(path)
+        raw = p.read_bytes()
+        return cls.from_json(json.loads(gzip.decompress(raw) if p.suffix == ".gz" else raw))
 
 
 # ---------------------------------------------------------------- construção
@@ -214,6 +276,38 @@ def _resample(points: list[tuple[float, float]], step: float) -> list[tuple[floa
     if acc - out[-1][2] > 0.5:
         out.append((points[-1][0], points[-1][1], acc))
     return out
+
+
+def compress_profile(prof: list[tuple[float, float]], tol: float = 0.4) -> list[tuple[float, float]]:
+    """Junta passos seguidos com declive quase igual (mantém a subida total)."""
+    out: list[list[float]] = []
+    for length, g in prof:
+        if out and abs(out[-1][1] - g) <= tol:
+            l0, g0 = out[-1]
+            out[-1] = [l0 + length, (g0 * l0 + g * length) / (l0 + length)]
+        else:
+            out.append([length, g])
+    return [(l, g) for l, g in out]
+
+
+def simplify(points: list[tuple[float, float]], tol: float = 2.0) -> list[tuple[float, float]]:
+    """Douglas–Peucker: tira vértices que não mudam o traçado mais de `tol` metros."""
+    if len(points) < 3:
+        return points
+    keep = [False] * len(points)
+    keep[0] = keep[-1] = True
+    stack = [(0, len(points) - 1)]
+    while stack:
+        i, k = stack.pop()
+        best, idx = 0.0, None
+        for m in range(i + 1, k):
+            d = _seg_dist(*points[m], *points[i], *points[k])
+            if d > best:
+                best, idx = d, m
+        if idx is not None and best > tol:
+            keep[idx] = True
+            stack += [(i, idx), (idx, k)]
+    return [p for p, kp in zip(points, keep) if kp]
 
 
 def _smooth(values: list[float], window: int) -> list[float]:
@@ -318,16 +412,22 @@ def build(osm: OsmData, elevation, center: tuple[float, float] | None = None) ->
             if seg > 0:
                 prof.append((seg, max(-MAX_GRADE, min(MAX_GRADE, (e2 - e1) / seg * 100))))
         eid += 1
-        g.edges[eid] = Edge(eid, ids[0], ids[-1], w.name, w.highway or "", pts, length, prof,
-                            w.bike_ok(), w.foot_ok(), w.oneway_for_bike())
+        g.edges[eid] = Edge(eid, ids[0], ids[-1], w.name, w.highway or "", simplify(pts), length,
+                            compress_profile(prof), w.bike_ok(), w.foot_ok(), w.oneway_for_bike())
 
     # margens e docas
     g.water = [[xy[n] for n in w.nodes] for w in osm.water_edges]
-    for j in g.junctions.values():
+    if g.water:
+        cell = 200.0
+        segs: dict[tuple[int, int], list] = {}
         for line in g.water:
-            if any(_seg_dist(j.x, j.y, *a, *b) < DOCK_M for a, b in zip(line, line[1:])):
-                j.dock = True
-                break
+            for a, b in zip(line, line[1:]):
+                for cx in range(int(min(a[0], b[0]) // cell) - 1, int(max(a[0], b[0]) // cell) + 2):
+                    for cy in range(int(min(a[1], b[1]) // cell) - 1, int(max(a[1], b[1]) // cell) + 2):
+                        segs.setdefault((cx, cy), []).append((a, b))
+        for j in g.junctions.values():
+            near = segs.get((int(j.x // cell), int(j.y // cell)), ())
+            j.dock = any(_seg_dist(j.x, j.y, *a, *b) < DOCK_M for a, b in near)
 
     g.index()
     # junções sem nenhuma rua (pontas de vias excluídas) saem

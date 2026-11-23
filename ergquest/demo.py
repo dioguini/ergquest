@@ -1,9 +1,10 @@
-"""Demonstração sem hardware: um dia da Ana no ErgQuest, nas ruas reais de Lisboa.
+"""Demonstração sem hardware: um dia no ErgQuest, na Área Metropolitana de Lisboa.
 
     python -m ergquest.demo
 
-Usa o grafo de `data/lisboa-centro.json` (OpenStreetMap + altimetria; para
-o refazer: `python tools/build_zone.py lisboa-centro`).
+Usa o grafo de `data/lisboa-metro.json.gz` (OpenStreetMap via Overture +
+altimetria Copernicus; para o refazer: `python tools/build_metro.py`).
+A Ana é nível 9: tem abertas a Baixa, o Centro, o Norte e o Este.
 
 1. TREINO — 3 × 6′ a 95 % FTP, ERG desligado, no mundo: no Cais do Sodré a
    Ana vê os ramos reais da interseção, o jogo sugere o que encaixa nos
@@ -13,6 +14,10 @@ o refazer: `python tools/build_zone.py lisboa-centro`).
 3. JOGO — recado ad-hoc a pé, com paragens em sítios reais de Alfama.
 4. JOGO — riquexó com dois passageiros da Praça do Comércio ao Castelo.
 5. EFEITO COLATERAL — carga, forma, XP e desbloqueios.
+6. LIVRE — a Ana pedala para oeste sem destino, chega ao limite da zona
+   Oeste (ainda fechada) e o GPS leva-a de volta.
+7. EXPERIENTE — o Rui (nível 20) leva uma entrega à outra margem pela Ponte
+   25 de Abril e aceita um pedido de remo de margem a margem.
 """
 from __future__ import annotations
 
@@ -31,11 +36,15 @@ from .shared import load, physics
 from .shared.movement import PEDICAB, Bike, Runner, ascent, distance
 from .training.setup import Branch, TrainingSetup, Venue, rank_branches, trainer_command
 from .training.workout import Step, Workout, WorkoutRunner
+from .game.progression import xp_for_level
+from .shared.movement import Rower
+from .world import metro
+from .world.access import Access
 from .world.graph import CityGraph
+from .world.jobs import cross_bank_allowed, distances, pick_destination
 from .world.navigation import Navigator, fastest_route, lookahead_profile, route_profile, street_names
-from .world.places import place
 
-DATA = Path(__file__).resolve().parents[1] / "data" / "lisboa-centro.json"
+DATA = Path(__file__).resolve().parents[1] / "data" / "lisboa-metro.json.gz"
 
 SPOTS = {   # (lat, lon) de sítios conhecidos
     "Cais do Sodré": (38.7062, -9.1444),
@@ -44,6 +53,8 @@ SPOTS = {   # (lat, lon) de sítios conhecidos
     "Miradouro de Santa Luzia": (38.7117, -9.1301),
     "Castelo de São Jorge": (38.7126, -9.1335),
     "Largo do Chafariz de Dentro": (38.7118, -9.1263),
+    "Algés": (38.6985, -9.2330),
+    "Almada": (38.6790, -9.1570),
 }
 
 
@@ -59,15 +70,17 @@ def stars_txt(n: int) -> str:
 
 
 class City:
-    def __init__(self, graph: CityGraph):
+    def __init__(self, graph: CityGraph, access: Access | None = None):
         self.g = graph
+        self.access = access
 
-    def junction(self, spot: str, sport: str) -> int:
+    def junction(self, spot: str, sport: str, zone: str | None = None) -> int:
         lat, lon = SPOTS[spot]
-        return self.g.nearest(*self.g.projection.to_xy(lat, lon), sport=sport).id
+        where = (lambda j: j.zone == zone) if zone else None
+        return self.g.nearest(*self.g.projection.to_xy(lat, lon), sport=sport, where=where).id
 
-    def route(self, a: int, b: int, mover, extra_kg: float = 0.0):
-        return fastest_route(self.g, a, b, mover, 0.75, extra_kg)
+    def route(self, a: int, b: int, mover, extra_kg: float = 0.0, access=None):
+        return fastest_route(self.g, a, b, mover, 0.75, extra_kg, access or self.access)
 
     def where(self, j: int) -> str:
         names = [e.name for e, _ in self.g.outgoing(j, "run") if e.name] or ["sem nome"]
@@ -104,7 +117,7 @@ def ride(city: City, route, bike: Bike, watts_fn, t0: float, rng, extra_kg=0.0, 
 
 def main(seed: int = 7) -> dict:
     if not DATA.exists():
-        raise SystemExit(f"Falta {DATA.name}: corre `python tools/build_zone.py lisboa-centro`.")
+        raise SystemExit(f"Falta {DATA.name}: corre `python tools/build_metro.py`.")
     rng = random.Random(seed)
     city = City(CityGraph.load(DATA))
     today = date(2026, 11, 23)
@@ -113,13 +126,17 @@ def main(seed: int = 7) -> dict:
     gym = [strength.GymSession(today - timedelta(days=d), 45, with_hr=d % 2 == 0) for d in (2, 5, 9, 13, 16, 20)]
     ana.robustness = strength.robustness(gym, today)
     bike, run = Bike(ana.weight_kg, ana.ftp_w), Runner(ana.weight_kg, ana.run_threshold_mps)
-    player = PlayerState("ana", "lisboa", "centro")
+    player = PlayerState("ana", "lisboa", "n-baixa")
+    city.access = ana.access()
     loads: list[float] = []
     stars: list[int] = []
     st = city.g.stats()
-    print(f"== ErgQuest · Lisboa (dados reais: {st['junctions']} interseções, {st['bike_km']} km de bicicleta, "
-          f"{st['ele_min']:.0f}–{st['ele_max']:.0f} m)")
-    print(f"   Ana · nível {ana.level} · Robustez {ana.robustness:.2f}")
+    print(f"== ErgQuest · Área Metropolitana de Lisboa ({st['junctions']} interseções, {st['bike_km']:.0f} km de "
+          f"estradas, {st['water_km']} km de rio, {st['docks']} docas)")
+    opened = ", ".join(metro.ZONE[z].name for z in metro.UNLOCK_ORDER if z in city.access.zones)
+    nxt = city.access.next_unlock()
+    print(f"   Ana · nível {ana.level} · Robustez {ana.robustness:.2f} · zonas abertas: {opened} · "
+          f"a seguir: {nxt[0]} (nível {nxt[1]})")
 
     # ================================================================ 1. TREINO
     wo = Workout("3×6′ limiar", [Step("steady", 600, target_lo=60)]
@@ -130,7 +147,7 @@ def main(seed: int = 7) -> dict:
     start = city.junction("Cais do Sodré", "bike")
     upcoming = runner.upcoming(540, 600)
     branches = [Branch(f"{e.name or e.highway} (para {compass(e, fwd)})", lookahead_profile(city.g, e, fwd, "bike"))
-                for e, fwd in city.g.outgoing(start, "bike")]
+                for e, fwd in city.g.outgoing(start, "bike", city.access)]
     ranked = rank_branches(bike, branches, upcoming)
     print("  No Cais do Sodré, próximos blocos:", ", ".join(f"{s/60:.0f}′@{(f or 0):.0%}" for s, f in upcoming))
     for name, score in ranked:
@@ -172,10 +189,13 @@ def main(seed: int = 7) -> dict:
     player.start(Sport.BIKE, t, Mode.MISSION)
     board = OrderBoard("ana", ana.level, lambda s, i: bike.speed_at(i, 0.0), ana.robustness,
                        strength.max_cargo_kg(ana.robustness), movers={Sport.BIKE: bike, Sport.RUN: run})
-    srcs = sources_for("lisboa", "centro")
-    spots = place(city.g, srcs)
+    srcs = sources_for("lisboa", "n-baixa")
     food = ana.available_sources([s for s in srcs if s.kind is Kind.FOOD])[0]
-    a = city.g.nearest(city.g.junctions[spots[food.id]].x, city.g.junctions[spots[food.id]].y, "bike").id
+    # o restaurante (fictício) fica num restaurante real da Baixa, perto do Cais do Sodré
+    cx, cy = city.g.projection.to_xy(*SPOTS["Cais do Sodré"])
+    spot = min((a for a in city.g.anchors if a.kind == "restaurant" and city.g.junctions[a.junction].zone == "n-baixa"),
+               key=lambda a: (a.x - cx) ** 2 + (a.y - cy) ** 2)
+    a = city.g.nearest(spot.x, spot.y, "bike", where=lambda j: j.zone == "n-baixa").id
     b = city.junction("Miradouro de Santa Luzia", "bike")
     r = city.route(a, b, bike)
     prof = route_profile(city.g, r)
@@ -272,9 +292,55 @@ def main(seed: int = 7) -> dict:
           f"Forma amanhã {after['ctl'] - after['atl']:+.0f} ({load.form_state(after['ctl'] - after['atl'])})")
     print(f"  +{xp} XP → nível {ana.level} · restaurantes abertos: {ana.establishments_unlocked('food')}")
     print(f"  Anti-cheat do treino: confiança {report.trust} · rankings {'OK' if report.ranked_ok else 'em revisão'}")
-    print(f"\n  Dados: {city.g.to_json()['attribution']}")
+
+    # ================================================================ 6. LIVRE: o limite do mundo
+    print("\n[LIVRE] A Ana pedala sem destino para oeste, pela marginal.")
+    ana_access = Access.for_level(9)
+    start = city.junction("Cais do Sodré", "bike")
+    alges = city.junction("Algés", "bike", zone="n-oeste")
+    towards = fastest_route(city.g, start, alges, bike, access=Access.everything())
+    nav = Navigator.at(city.g, start, "bike", towards, access=ana_access)
+    limit = None
+    while limit is None and nav.travelled_m < 30_000:
+        nav.advance(8.0)
+        limit = next((l for l in nav.log if l.startswith("limite:")), None)
+    here_name = nav.edge.name or {"service": "uma rua de serviço", "footway": "um passeio",
+                                  "cycleway": "uma ciclovia"}.get(nav.edge.highway, nav.edge.highway)
+    print(f"  Ao fim de {nav.travelled_m/1000:.1f} km, em {here_name}: 🔒 {limit[8:] if limit else '—'}")
+    print("  As ruas para a zona fechada aparecem bloqueadas; ela carrega em «regressar»:")
+    back = nav.go_back(start, bike)
+    back_km = sum(city.g.edges[e].length for e, _ in back) / 1000 + nav.remaining_on_edge / 1000
+    print(f"  GPS de volta ao Cais do Sodré: {back_km:.1f} km por " + " → ".join(street_names(city.g, back)[:5]) + " …")
+    free_km = nav.travelled_m / 1000
+
+    # ================================================================ 7. EXPERIENTE: as duas margens
+    rui = Profile("rui", weight_kg=72, ftp_w=300, xp=xp_for_level(20), robustness=0.6)
+    rui_access = rui.access()
+    rbike, rrow = Bike(rui.weight_kg, rui.ftp_w), Rower(rui.weight_kg, 260)
+    print(f"\n[EXPERIENTE] Rui · nível {rui.level} · pontes {'abertas' if cross_bank_allowed(rui.level, 'bike') else 'fechadas'} · "
+          f"remo entre margens {'aberto' if cross_bank_allowed(rui.level, 'row') else 'fechado'}")
+    almada = city.junction("Almada", "bike", zone="s-norte")
+    over = fastest_route(city.g, a, almada, rbike, 0.75, access=rui_access)
+    prof = route_profile(city.g, over)
+    bridge = next((metro.BRIDGES[city.g.edges[e].lock][0] for e, _ in over if city.g.edges[e].lock in metro.BRIDGES), "—")
+    print(f"  📱 Entrega {food.name} → Almada: {distance(prof)/1000:.1f} km, +{ascent(prof):.0f} m, pela {bridge} "
+          f"(a Ana, nível {ana.level}: {'pode' if fastest_route(city.g, a, almada, bike, access=ana_access) else 'não pode'})")
+    dock = min((j for j in city.g.docks() if j.zone in ("n-baixa", "n-centro")),
+               key=lambda j: (j.x - cx) ** 2 + (j.y - cy) ** 2)
+    dest = pick_destination(city.g, dock.id, "row", rui_access, random.Random(seed), 1500, 9000, other_bank=True)
+    if dest is not None:
+        d_km = distances(city.g, dock.id, "row", rui_access)[dest] / 1000
+        rroute = fastest_route(city.g, dock.id, dest, rrow, 0.75, access=rui_access)
+        cross = next((city.g.edges[e].lock for e, _ in rroute if city.g.edges[e].lock), "")
+        print(f"  🚣 Passeio de margem a margem: doca em {metro.ZONE[dock.zone].name} → doca em "
+              f"{metro.ZONE[city.g.junctions[dest].zone].name} ({city.where(dest)}), {d_km:.1f} km pelo rio, "
+              f"pela travessia {metro.CROSSING_NAMES.get(cross, cross)}")
+    ana_cross = pick_destination(city.g, dock.id, "row", ana_access, random.Random(seed), 1500, 9000, other_bank=True)
+    print(f"  (para a Ana o mesmo pedido {'existe' if ana_cross else 'não aparece: só remo na sua margem'})")
+    print(f"\n  Dados: {city.g.attribution}")
     return {"loads": loads, "stars": stars, "trust": report.trust,
-            "compliance": runner.overall_compliance(), "errand": res3["completed"], "taxi": res4["stars"]}
+            "compliance": runner.overall_compliance(), "errand": res3["completed"], "taxi": res4["stars"],
+            "limit": limit, "free_km": free_km, "bridge": bridge, "cross_dest": dest}
 
 
 if __name__ == "__main__":

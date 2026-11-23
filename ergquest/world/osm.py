@@ -12,10 +12,13 @@ from pathlib import Path
 
 EARTH_R = 6_371_000.0
 
-# Que ruas servem a que desporto. Autoestradas e vias rápidas ficam de fora.
-BIKE_HIGHWAYS = {"primary", "secondary", "tertiary", "unclassified", "residential", "living_street",
+# Que ruas servem a que desporto. Neste mundo reina o ciclismo e a corrida:
+# autoestradas e vias rápidas também contam.
+MOTORWAYS = {"motorway", "trunk", "motorway_link", "trunk_link"}
+SYNTHETIC = {"ligação", "serra"}          # estradas do jogo: ligações nas extremidades e serras
+BIKE_HIGHWAYS = MOTORWAYS | SYNTHETIC | {"primary", "secondary", "tertiary", "unclassified", "residential", "living_street",
                  "service", "cycleway", "primary_link", "secondary_link", "tertiary_link", "pedestrian", "track"}
-FOOT_HIGHWAYS = {"primary", "secondary", "tertiary", "unclassified", "residential", "living_street",
+FOOT_HIGHWAYS = MOTORWAYS | SYNTHETIC | {"primary", "secondary", "tertiary", "unclassified", "residential", "living_street",
                  "service", "pedestrian", "footway", "steps", "path", "track", "cycleway",
                  "primary_link", "secondary_link", "tertiary_link"}
 

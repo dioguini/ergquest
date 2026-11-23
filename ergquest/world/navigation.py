@@ -6,6 +6,11 @@
 * `Navigator` — a posição do atleta numa rua. Ao chegar a uma interseção
   mostra as opções (esquerda, em frente, direita…), com a sugestão do GPS
   marcada. As setas escolhem; sem escolha, segue a sugestão (ou em frente).
+* **Limites do mundo** — com um `Access`, as ruas que entram em zonas,
+  pontes ou travessias fechadas aparecem como bloqueadas (com o nível a que
+  abrem) e não se podem tomar. Se não houver outra saída, o atleta dá
+  meia-volta. A qualquer momento: `turn_around()` (meia-volta) e
+  `go_back(destino)` (o GPS leva-o de volta, pelo lado mais rápido).
 """
 from __future__ import annotations
 
@@ -18,7 +23,7 @@ from .graph import CityGraph, Edge
 
 
 def _sport_of(mover: Mover) -> str:
-    return {"Bike": "bike", "Runner": "run"}.get(type(mover).__name__, "bike")
+    return {"Bike": "bike", "Runner": "run", "Rower": "row"}.get(type(mover).__name__, "bike")
 
 
 def edge_time(mover: Mover, edge: Edge, forward: bool, intensity: float, extra_kg: float = 0.0) -> float:
@@ -26,8 +31,11 @@ def edge_time(mover: Mover, edge: Edge, forward: bool, intensity: float, extra_k
 
 
 def fastest_route(graph: CityGraph, src: int, dst: int, mover: Mover, intensity: float = 0.75,
-                  extra_kg: float = 0.0) -> list[tuple[int, bool]] | None:
-    """[(aresta, sentido)] mais rápido de `src` a `dst` (Dijkstra pelo tempo)."""
+                  extra_kg: float = 0.0, access=None) -> list[tuple[int, bool]] | None:
+    """[(aresta, sentido)] mais rápido de `src` a `dst` (Dijkstra pelo tempo).
+
+    Com `access`, só por zonas abertas e pontes/travessias desbloqueadas.
+    """
     sport = _sport_of(mover)
     best = {src: 0.0}
     prev: dict[int, tuple[int, int, bool]] = {}
@@ -38,7 +46,7 @@ def fastest_route(graph: CityGraph, src: int, dst: int, mover: Mover, intensity:
             break
         if t > best.get(j, math.inf):
             continue
-        for e, fwd in graph.outgoing(j, sport):
+        for e, fwd in graph.outgoing(j, sport, access):
             k = graph.end_of(e, fwd)
             nt = t + edge_time(mover, e, fwd, intensity, extra_kg)
             if nt < best.get(k, math.inf):
@@ -130,6 +138,7 @@ class Option:
     forward: bool
     label: str
     suggested: bool = False
+    locked: str | None = None        # porque está fechada (zona, ponte, travessia)
 
     @property
     def name(self) -> str:
@@ -147,14 +156,16 @@ class Navigator:
     pending: str | None = None                                      # escolha das setas: "esquerda"…
     travelled_m: float = 0.0
     log: list[str] = field(default_factory=list)
+    access: object | None = None                                    # world.access.Access
 
     @classmethod
-    def at(cls, graph: CityGraph, junction: int, sport: str, route: list[tuple[int, bool]] | None = None):
+    def at(cls, graph: CityGraph, junction: int, sport: str, route: list[tuple[int, bool]] | None = None,
+           access=None):
         if route:
             eid, fwd = route[0]
-            return cls(graph, sport, graph.edges[eid], fwd, route=list(route[1:]))
-        e, fwd = graph.outgoing(junction, sport)[0]
-        return cls(graph, sport, e, fwd)
+            return cls(graph, sport, graph.edges[eid], fwd, route=list(route[1:]), access=access)
+        e, fwd = graph.outgoing(junction, sport, access)[0]
+        return cls(graph, sport, e, fwd, access=access)
 
     @property
     def junction_ahead(self) -> int:
@@ -190,10 +201,12 @@ class Navigator:
         suggested = self.route[0] if self.route else None
         opts = []
         for e, fwd in self.graph.outgoing(j, self.sport):
-            if e.id == self.edge.id and fwd != self.forward and len(self.graph.outgoing(j, self.sport)) > 1:
-                continue      # não oferecer voltar para trás, exceto num beco
             h = _heading(e.points, at_start=fwd)
-            opts.append(Option(e, fwd, turn_label(h - in_heading), (e.id, fwd) == suggested))
+            why = self.access.reason(self.graph, e, fwd) if self.access is not None else None
+            opts.append(Option(e, fwd, turn_label(h - in_heading), (e.id, fwd) == suggested, why))
+        back = [o for o in opts if o.edge.id == self.edge.id and o.forward != self.forward]
+        if len([o for o in opts if not o.locked]) > len([o for o in back if not o.locked]):
+            opts = [o for o in opts if o not in back]     # voltar para trás só num beco ou num limite
         return opts
 
     def press(self, arrow: str) -> None:
@@ -201,6 +214,7 @@ class Navigator:
         self.pending = arrow
 
     def _choose(self, opts: list[Option]) -> Option:
+        opts = [o for o in opts if not o.locked]
         if self.pending:
             want = self.pending
             self.pending = None
@@ -227,10 +241,23 @@ class Navigator:
             metres -= room
             self.travelled_m += room
             opts = self.options()
-            if not opts:
-                self.offset_m = self.edge.length
-                break
+            for o in opts:
+                if o.locked:
+                    self.log.append(f"limite: {o.locked}")
+            if not [o for o in opts if not o.locked]:
+                # fim do mundo aberto (ou beco): meia-volta automática
+                if not self.edge.allows(self.sport, not self.forward):
+                    self.log.append("parado: sentido único sem saída")
+                    self.offset_m = self.edge.length
+                    break
+                self.log.append("meia-volta")
+                self.forward, self.offset_m = not self.forward, 0.0
+                self.route = []
+                entered.append(self.edge.name or self.edge.highway)
+                continue
             pick = self._choose(opts)
+            if pick.edge.id == self.edge.id and pick.forward != self.forward:
+                self.log.append("meia-volta")
             if self.route and (pick.edge.id, pick.forward) == self.route[0]:
                 self.route.pop(0)
             elif self.route:
@@ -242,3 +269,39 @@ class Navigator:
 
     def off_route(self) -> bool:
         return bool(self.log) and self.log[-1] == "fora da rota"
+
+    def turn_around(self) -> None:
+        """Meia-volta aqui mesmo (tecla para trás): o mesmo sítio, no outro sentido."""
+        if not self.edge.allows(self.sport, not self.forward):
+            raise ValueError("sentido único: só se pode voltar na próxima interseção")
+        self.forward, self.offset_m = not self.forward, self.edge.length - self.offset_m
+        self.route = []
+        self.log.append("meia-volta")
+
+    def go_back(self, target: int, mover: Mover, intensity: float = 0.6) -> list[tuple[int, bool]]:
+        """Regressar: o GPS calcula o caminho até `target` pelo lado mais rápido
+        (seguir até à próxima interseção, ou dar meia-volta já)."""
+        ahead = self.junction_ahead
+        behind = self.graph.end_of(self.edge, not self.forward)
+        t_edge = edge_time(mover, self.edge, self.forward, intensity)
+        frac = self.offset_m / max(self.edge.length, 1.0)
+        options = []
+        r = fastest_route(self.graph, ahead, target, mover, intensity, access=self.access) if ahead != target else []
+        if r is not None:
+            options.append((t_edge * (1 - frac) + _route_time(self.graph, r, mover, intensity), False, r))
+        if self.edge.allows(self.sport, not self.forward):
+            r = fastest_route(self.graph, behind, target, mover, intensity, access=self.access) if behind != target else []
+            if r is not None:
+                options.append((t_edge * frac + _route_time(self.graph, r, mover, intensity), True, r))
+        if not options:
+            raise ValueError("sem caminho de regresso")
+        _, flip, route = min(options, key=lambda o: o[0])
+        if flip:
+            self.turn_around()
+        self.route = list(route)
+        self.log.append("a regressar")
+        return route
+
+
+def _route_time(g: CityGraph, route, mover: Mover, intensity: float) -> float:
+    return sum(edge_time(mover, g.edges[e], f, intensity) for e, f in route)

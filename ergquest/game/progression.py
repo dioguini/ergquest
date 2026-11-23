@@ -104,6 +104,11 @@ class Profile:
             return True
         return self.level >= c.unlock_level and self.active_weeks_last8 >= c.unlock_active_weeks
 
+    def access(self):
+        """O que o atleta pode usar no mapa da Área Metropolitana (zonas, pontes, travessias)."""
+        from ..world.access import Access
+        return Access.for_level(self.level)
+
     def zones_unlocked(self, city: City | str) -> list[str]:
         c = CITIES[city] if isinstance(city, str) else city
         if not self.city_unlocked(c):

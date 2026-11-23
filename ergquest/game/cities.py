@@ -58,6 +58,12 @@ class City:
         raise KeyError(zid)
 
 
+def _metro_zones() -> tuple["Zone", ...]:
+    from ..world import metro
+    rowing = {"n-norte", "s-sul"}       # zonas sem margem do Tejo
+    return tuple(Zone(z.id, z.name, z.level, water=z.id not in rowing) for z in metro.ZONES)
+
+
 def _venues(prefix: str, outdoor: tuple[str, ...], indoor: tuple[str, str, str], velo: str) -> tuple[Venue, ...]:
     vs = [Venue(f"{prefix}-crit-out-{i}", n, "crit_outdoor") for i, n in enumerate(outdoor, 1)]
     vs += [Venue(f"{prefix}-crit-in-{i}", n, "crit_indoor") for i, n in enumerate(indoor, 1)]
@@ -66,15 +72,10 @@ def _venues(prefix: str, outdoor: tuple[str, ...], indoor: tuple[str, str, str],
 
 
 CITIES: dict[str, City] = {c.id: c for c in (
-    City("lisboa", "Lisboa", 1, 0, (
-        Zone("baixa", "Baixa-Chiado", 1),
-        Zone("alfama", "Alfama e Graça", 3),
-        Zone("ribeira", "Cais do Sodré e Ribeira", 5, water=True),
-        Zone("belem", "Belém e Restelo", 8, water=True),
-        Zone("oriente", "Parque das Nações", 12, water=True),
-        Zone("monsanto", "Monsanto", 16),
-    ), _venues("lis", ("Circuito da Avenida", "Volta ao Parque Eduardo VII"),
-               ("Arena Tejo", "Pavilhão Alcântara", "Hangar Oriente"), "Velódromo do Tejo")),
+    # Lisboa é a Área Metropolitana inteira; as zonas e a ordem vêm de world/metro.py
+    City("lisboa", "Lisboa", 1, 0, _metro_zones(),
+         _venues("lis", ("Circuito da Avenida", "Volta ao Parque Eduardo VII"),
+                 ("Arena Tejo", "Pavilhão Alcântara", "Hangar Oriente"), "Velódromo do Tejo")),
     City("london", "London", 10, 4, (
         Zone("city", "The City", 10),
         Zone("southbank", "South Bank", 12, water=True),

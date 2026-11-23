@@ -64,16 +64,17 @@ class Tile:
         west = int(name[4:7]) * (1 if name[3] == "E" else -1)
         return cls(np.frombuffer(raw, dtype=">i2").reshape(side, side), south, west)
 
-    def covers(self, lat: float, lon: float) -> bool:
+    def covers(self, lat: float, lon: float, slack: float = 0.0) -> bool:
         span = (self.n - 1) * self.step
-        return self.top - span <= lat <= self.top and self.west <= lon <= self.west + span
+        m = slack * self.step
+        return self.top - span - m <= lat <= self.top + m and self.west - m <= lon <= self.west + span + m
 
     def elevation(self, lat: float, lon: float) -> float:
         """Interpolação bilinear; vazios (NaN) contam como nível do mar."""
-        if not self.covers(lat, lon):
+        if not self.covers(lat, lon, slack=2.0):
             raise ValueError(f"({lat}, {lon}) fora do mosaico {tile_name(self.south, self.west)}")
-        r = (self.top - lat) / self.step
-        c = (lon - self.west) / self.step
+        r = min(max((self.top - lat) / self.step, 0.0), self.n - 1.0)   # encostar à borda nas frestas
+        c = min(max((lon - self.west) / self.step, 0.0), self.n - 1.0)
         r0, c0 = min(int(r), self.n - 2), min(int(c), self.n - 2)
         fr, fc = r - r0, c - c0
         g = np.nan_to_num(self.grid[r0:r0 + 2, c0:c0 + 2], nan=0.0)
@@ -101,7 +102,8 @@ class Dem:
         return min(self.elevation(a, b) for a, b in pts)
 
     def elevation(self, lat: float, lon: float) -> float:
-        for t in self.tiles:
-            if t.covers(lat, lon):
-                return t.elevation(lat, lon)
+        for slack in (0.0, 2.0):     # entre mosaicos pode haver meio píxel de fresta
+            for t in self.tiles:
+                if t.covers(lat, lon, slack):
+                    return t.elevation(lat, lon)
         raise ValueError(f"sem altimetria para ({lat:.5f}, {lon:.5f}): falta {tile_name(lat, lon)}.hgt")

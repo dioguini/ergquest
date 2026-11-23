@@ -18,6 +18,7 @@ entra na forma, na fadiga e no fitness (CTL/ATL/TSB).
 | [docs/CONCEITO.md](docs/CONCEITO.md) | O conceito original. |
 | [docs/INTERPRETACAO.md](docs/INTERPRETACAO.md) | Leitura crítica: a tese, as tensões do conceito e como as resolvemos, decisões em aberto. |
 | [docs/ARQUITETURA.md](docs/ARQUITETURA.md) | Cliente/servidor, rede, dados e componentes. |
+| [docs/MUNDO.md](docs/MUNDO.md) | O mapa: Área Metropolitana de Lisboa, zonas e ordem de desbloqueio, pontes, remo, serras, limites. |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Fases F0–F6. |
 
 ## Experimentar
@@ -27,10 +28,10 @@ Python ≥ 3.11, sem dependências.
 ```bash
 python -m ergquest.demo                          # uma manhã de trabalho em Lisboa, sem hardware
 python -m unittest discover -s tests -t .        # testes
-python tools/build_zone.py lisboa-centro         # descarrega e constrói Lisboa (precisa de rede)
+python tools/build_metro.py                      # refaz o mapa da Área Metropolitana (precisa de rede)
 ```
 
-A demo mostra um dia da Ana nas ruas reais de Lisboa (`data/lisboa-centro.json`):
+A demo mostra um dia na Área Metropolitana de Lisboa (`data/lisboa-metro.json.gz`):
 1. **Treino** 3 × 6′ ao limiar, com ERG desligado e no mundo. No Cais do Sodré o
    jogo avalia os ramos reais da interseção e sugere o que encaixa nos blocos.
 2. **Jogo**: uma entrega de comida.
@@ -38,6 +39,10 @@ A demo mostra um dia da Ana nas ruas reais de Lisboa (`data/lisboa-centro.json`)
 4. **Jogo**: um riquexó com dois passageiros da Praça do Comércio ao Castelo, pela
    rota do GPS (Madalena, Limoeiro, Rua de Santiago), onde a física muda.
 5. **Efeito colateral**: a carga, o CTL/ATL/TSB, o XP e os desbloqueios.
+6. **Livre**: a Ana pedala para oeste, chega ao limite da zona Oeste (ainda
+   fechada) e o GPS leva-a de volta.
+7. **Experiente**: o Rui (nível 20) leva uma entrega a Almada pela Ponte 25 de
+   Abril e aceita um passeio de remo de margem a margem.
 
 ## O que já existe
 
@@ -53,10 +58,10 @@ A demo mostra um dia da Ana nas ruas reais de Lisboa (`data/lisboa-centro.json`)
 | `ergquest/game/rowing.py`, `chase.py` | Suavidade da remada; perseguição policial. |
 | `ergquest/game/strength.py`, `progression.py` | Robustez (buff do ginásio); XP, níveis, desbloqueios de zonas, cidades e estabelecimentos. |
 | `ergquest/game/session.py`, `challenges.py`, `cities.py` | Modos de sessão, trocas de desporto, desafios PvP, catálogo de cidades, crits e velódromos. |
-| `ergquest/world/` | O mundo real: OpenStreetMap + altimetria → grafo jogável (interseções, ruas com perfil, acesso por desporto, docas), rota mais rápida pela física de cada atleta, escolha nas interseções, estabelecimentos fictícios em sítios reais, mapa 2D. |
+| `ergquest/world/` | O mundo real: Área Metropolitana de Lisboa (OpenStreetMap + Copernicus) → grafo jogável com 9 zonas, pontes e travessias bloqueadas por nível, rede de remo com docas, estradas de ligação nas extremidades e duas serras; GPS pela física de cada atleta, limites, meia-volta e regresso; destinos nas duas margens para experientes; mapa interativo. |
 | `ergquest/server/anticheat.py` | Validação da telemetria: limites humanos, coerência de sensores, bots, física. |
 
 ## Dados de mapa
 
-Ruas © contribuidores do OpenStreetMap (ODbL); altimetria Copernicus GLO-30.
+Ruas © contribuidores do OpenStreetMap (ODbL), via Overture Maps; locais © Overture Maps Foundation; altimetria Copernicus GLO-30.
 Ver [data/LICENCA.md](data/LICENCA.md).
