@@ -74,7 +74,7 @@
 ### 4.2 A construir
 | Componente | Notas |
 | :--- | :--- |
-| Ligação a hardware: BLE (FTMS, potência, FC, CSC), ANT+ FE-C, remos FTMS | Só no cliente. Vários sensores em simultâneo, com prioridade por métrica. |
+| Ligação a hardware: BLE (FTMS, potência, FC, RSC), ANT+ (FE-C, FC, potência, SDM) | `ergquest/devices/` — protocolos, controlo ERG/declive, prioridade por métrica, requisitos por desporto: feitos; falta testar com aparelhos reais. |
 | Sensores simulados | Testes, *bots* de carga e NPCs. |
 | Ficheiros `.fit` (escrever/ler), treinos `.zwo/.mrc/.erg` | Exportar para Strava, Garmin, TrainingPeaks. |
 | Zonas, curva de potência, picos | Categorias W/kg e anti-cheat. |
@@ -129,7 +129,12 @@ ergquest/
     metrobuild.py  Overture → grafo; ligações nas extremidades; serras; rio e docas
     access.py      o que cada nível pode usar (zonas, pontes, travessias)
     jobs.py        destinos de trabalhos, incluindo a outra margem para experientes
-    metromap.py    mapa interativo (canvas) da Área Metropolitana
+    metromap.py    mapa interativo por modalidade (página em metromap.html)
+  devices/         APARELHOS
+    ble.py         Bluetooth: FTMS (rolo, passadeira, remo), FC, potência, passada; controlo
+    ant.py         ANT+: FE-C, FC, potência, passada; mensagens da antena USB; controlo
+    hub.py         tipos, requisitos por desporto, verificação, junção das leituras
+    sim.py         aparelhos simulados com os mesmos protocolos
   server/
     anticheat.py   validação da telemetria
   demo.py          um dia em Lisboa, sem hardware

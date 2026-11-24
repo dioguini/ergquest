@@ -65,7 +65,7 @@ class ProgressionTest(unittest.TestCase):
         self.assertTrue(p.city_unlocked("lisboa"))
         self.assertFalse(p.city_unlocked("london"))
         self.assertEqual(p.zones_unlocked("lisboa"), ["n-baixa"])
-        p.xp, p.active_weeks_last8 = progression.xp_for_level(12), 4
+        p.xp, p.active_weeks_last8 = {"bike": progression.xp_for_level(12)}, 4
         self.assertTrue(p.city_unlocked("london"))
         self.assertIn("n-este", p.zones_unlocked("lisboa"))
 

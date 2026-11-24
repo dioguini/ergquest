@@ -11,3 +11,6 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["ergquest*"]
+
+[tool.setuptools.package-data]
+ergquest = ["world/*.html"]

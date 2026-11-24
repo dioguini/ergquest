@@ -42,21 +42,39 @@ class ZonesTest(unittest.TestCase):
 
 
 class AccessTest(unittest.TestCase):
-    def test_access_grows_with_level(self):
-        a1, a9, a15, a18 = (Access.for_level(n) for n in (1, 9, 15, 18))
+    def test_land_access_grows_with_level(self):
+        a1, a9, a15 = (Access.for_level(n) for n in (1, 9, 15))
         self.assertEqual(a1.zones, {"n-baixa"})
         self.assertEqual(a9.zones, {"n-baixa", "n-centro", "n-norte", "n-este"})
         self.assertFalse(a9.locks)
-        self.assertIn("ponte-25-abril", a15.locks)
-        self.assertNotIn("travessia-belem", a15.locks)
-        self.assertIn("travessia-belem", a18.locks)
+        self.assertEqual(a15.locks, set(metro.BRIDGES))           # na terra só há pontes
         self.assertEqual(a9.next_unlock(), ("Oeste", 12))
+        self.assertEqual(Access.for_level(9, "run").zones, a9.zones)   # corrida: o mesmo mapa, a mesma escada
 
-    def test_profile_access(self):
-        p = Profile("x", 70, xp=xp_for_level(15), robustness=1.0)
-        self.assertIn("s-norte", p.access().zones)
+    def test_river_has_its_own_ladder(self):
+        r1, r6, r12 = (Access.for_level(n, "row") for n in (1, 6, 12))
+        self.assertEqual(r1.zones, {"r-baixa"})
+        self.assertEqual(r6.zones, {"r-baixa", "r-centro", "r-este"})
+        self.assertFalse(r6.locks)
+        self.assertEqual(r12.locks, set(metro.ROW_CROSSINGS))     # no rio só há travessias
+        self.assertIn("r-sul-norte", r12.zones)
+        self.assertEqual(r6.next_unlock(), ("Tejo · Oeste", 9))
+
+    def test_profile_levels_are_independent(self):
+        p = Profile("x", 70, xp={"bike": xp_for_level(15), "run": xp_for_level(3)}, robustness=1.0)
+        self.assertEqual(p.levels, {"bike": 15, "run": 3, "row": 1})
+        self.assertEqual(p.level, 15)
+        self.assertIn("s-norte", p.access("bike").zones)
+        self.assertEqual(p.access("run").zones, {"n-baixa", "n-centro"})
+        self.assertEqual(p.access("row").zones, {"r-baixa"})
+        p.add_session(60, [5], sport="row")
+        self.assertGreater(p.xp["row"], 0)
+        self.assertEqual(p.level_in("bike"), 15)                  # remar não mexe no ciclismo
+        with self.assertRaises(ValueError):
+            p.add_session(30, [], sport="gym")
         self.assertTrue(cross_bank_allowed(15, "bike"))
-        self.assertFalse(cross_bank_allowed(15, "row"))
+        self.assertFalse(cross_bank_allowed(11, "row"))
+        self.assertTrue(cross_bank_allowed(12, "row"))
 
 
 class OvertureTest(unittest.TestCase):
@@ -75,11 +93,15 @@ class OvertureTest(unittest.TestCase):
             {"subtype": "road", "class": "residential", "geometry": wkb([(38.5, -9.4), (38.6, -9.4)]),
              "connectors": []},                                                   # fora da cidade: não entra
             {"subtype": "rail", "class": "standard_gauge", "geometry": wkb([(38.5, -9.4), (38.6, -9.4)])},
+            {"subtype": "road", "class": "steps", "geometry": wkb([(38.5, -9.4), (38.6, -9.4)])},    # escadas: fora
+            {"subtype": "road", "class": "tertiary", "road_surface": [{"value": "gravel"}],         # gravilha: fora
+             "geometry": wkb([(38.5, -9.4), (38.6, -9.4)])},
         ]
         data, stubs = metrobuild.from_overture(rows, box=box)
         self.assertEqual(len(data.ways), 2)
         a, b = data.ways
-        self.assertEqual(a.tags, {"highway": "primary", "name": "Estrada A", "bridge": "yes", "oneway": "yes"})
+        self.assertEqual(a.tags, {"highway": "primary", "name": "Estrada A", "bridge": "yes", "oneway": "yes",
+                                  "bicycle": "yes", "foot": "yes"})
         self.assertEqual(a.nodes[1], b.nodes[0])                     # interseção partilhada em c2
         self.assertEqual(len(b.nodes), 2)                            # o ponto a 39,2° ficou de fora
         self.assertEqual(stubs, {b.nodes[-1]})                       # ponta cortada na extremidade
@@ -149,7 +171,7 @@ def two_banks() -> CityGraph:
     g = CityGraph(Projection(*metro.BAIXA_CENTER))
     J = {"A": (0, 0, "n-baixa"), "B": (1000, 0, "n-centro"), "C": (2000, 0, "n-oeste"),
          "S": (1000, -2000, "s-norte"), "T": (1000, -3000, "s-sul"),
-         "W1": (0, -500, "n-baixa"), "W2": (0, -1500, "s-norte"), "D2": (0, -1800, "s-norte")}
+         "W1": (0, -500, "r-baixa"), "W2": (0, -1500, "r-sul-norte"), "D2": (0, -1800, "s-norte")}
     ids = {k: i + 1 for i, k in enumerate(J)}
     for k, (x, y, z) in J.items():
         jid = -ids[k] if k.startswith("W") else ids[k]
@@ -215,11 +237,24 @@ class LimitsTest(unittest.TestCase):
     def test_rowing_crossing_needs_experience(self):
         a = self.ids["A"]
         rng = random.Random(2)
-        self.assertIsNone(pick_destination(self.g, a, "row", Access.for_level(15), rng, 10, 9000, other_bank=True))
-        self.assertEqual(pick_destination(self.g, a, "row", Access.for_level(18), rng, 10, 9000, other_bank=True),
+        self.assertIsNone(pick_destination(self.g, a, "row", Access.for_level(11, "row"), rng, 10, 9000, other_bank=True))
+        self.assertEqual(pick_destination(self.g, a, "row", Access.for_level(12, "row"), rng, 10, 9000, other_bank=True),
                          self.ids["D2"])
-        r = fastest_route(self.g, a, self.ids["D2"], Rower(75, 200), access=Access.for_level(18))
+        r = fastest_route(self.g, a, self.ids["D2"], Rower(75, 200), access=Access.for_level(12, "row"))
         self.assertEqual([self.g.edges[e].mode for e, _ in r], ["dock", "water", "dock"])
+
+
+class MapExportTest(unittest.TestCase):
+    def test_export_has_both_maps(self):
+        from ergquest.world import metromap
+        g, _ = two_banks()
+        d = metromap.export(g)
+        self.assertEqual([z["id"] for z in d["land_zones"]], metro.UNLOCK_ORDER)
+        self.assertEqual([z["id"] for z in d["row_zones"]], metro.ROW_UNLOCK_ORDER)
+        self.assertEqual(d["crossings"][0]["name"], "Belém ↔ Porto Brandão")
+        self.assertIn("rolo", d["devices"]["bike"])
+        self.assertEqual(d["devices"]["row"], "remo")
+        self.assertIn("t-row", metromap.PAGE)                     # separador do remo
 
 
 @unittest.skipUnless(REAL.exists(), "sem data/lisboa-metro.json.gz")
@@ -231,6 +266,8 @@ class RealMetroTest(unittest.TestCase):
     def test_all_zones_bridges_and_climbs(self):
         zones = {j.zone for j in self.g.junctions.values()}
         self.assertTrue(set(metro.UNLOCK_ORDER) <= zones)
+        self.assertTrue(set(metro.ROW_UNLOCK_ORDER) <= zones)             # o rio com as zonas do remo
+        self.assertFalse([e for e in self.g.edges.values() if e.highway in ("steps", "footway", "path", "track")])
         locks = {e.lock for e in self.g.edges.values() if e.lock}
         self.assertTrue(set(metro.BRIDGES) <= locks and set(metro.ROW_CROSSINGS) <= locks)
         for c in metro.CLIMBS:
@@ -238,7 +275,7 @@ class RealMetroTest(unittest.TestCase):
             self.assertAlmostEqual(up / 1000, c.up_km, delta=0.1)
 
     def test_banks_only_meet_on_bridges(self):
-        acc = Access({z.id for z in metro.ZONES}, set())             # tudo aberto menos pontes
+        acc = Access({z.id for z in metro.ZONES}, set(), "bike")     # tudo aberto menos pontes
         start = self.g.nearest(*self.g.projection.to_xy(*metro.BAIXA_CENTER), sport="bike").id
         seen, stack = {start}, [start]
         while stack:

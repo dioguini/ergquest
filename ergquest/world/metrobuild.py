@@ -65,8 +65,16 @@ def _oneway(restrictions) -> str | None:
     return None
 
 
-def keep_class(cls: str | None, lat: float, lon: float) -> bool:
-    if not cls:
+def surfaces_of(row: dict) -> set[str]:
+    return {s.get("value") for s in (row.get("road_surface") or []) if s.get("value")}
+
+
+def keep_class(cls: str | None, lat: float, lon: float, surfaces: set[str] | frozenset = frozenset()) -> bool:
+    """Só pavimento: classes de estrada/rua e nenhum troço de terra, gravilha ou afins.
+
+    Sem informação de piso, uma estrada assume-se asfaltada.
+    """
+    if not cls or cls in metro.EXCLUDED_CLASSES or surfaces & metro.UNPAVED_SURFACES:
         return False
     city = metro.zone_of(lat, lon) in ("n-baixa", "n-centro")
     return cls in (metro.CITY_CLASSES if city else metro.MAIN_CLASSES)
@@ -91,7 +99,7 @@ def from_overture(rows: list[dict], box=metro.BOX, keep=keep_class) -> tuple[Osm
         if len(pts) < 2:
             continue
         mid_lon, mid_lat = pts[len(pts) // 2]
-        if not keep(r.get("class"), mid_lat, mid_lon):
+        if not keep(r.get("class"), mid_lat, mid_lon, surfaces_of(r)):
             continue
         # distância acumulada (m) para colocar as interseções pela fração "at"
         cum = [0.0]
@@ -116,7 +124,7 @@ def from_overture(rows: list[dict], box=metro.BOX, keep=keep_class) -> tuple[Osm
             if s[1] is None:
                 s[1] = new_id()
         flags = {v for f in (r.get("road_flags") or []) for v in (f.get("values") or [])}
-        tags = {"highway": r["class"]}
+        tags = {"highway": r["class"], "bicycle": "yes", "foot": "yes"}   # o mesmo mapa para os dois
         name = (r.get("names") or {}).get("primary")
         if name:
             tags["name"] = name
@@ -483,7 +491,8 @@ def _add_water(g: CityGraph, is_water, spacing: float = 400.0) -> None:
     for w in lane_nodes:
         wj = g.junctions[w]
         land = g.nearest(wj.x, wj.y, within=5000, where=lambda j: j.id > 0)
-        wj.zone = land.zone if land else metro.zone_of(*g.projection.to_latlon(wj.x, wj.y))
+        land_zone = land.zone if land else metro.zone_of(*g.projection.to_latlon(wj.x, wj.y))
+        wj.zone = metro.LAND_TO_ROW[land_zone]      # o rio tem as suas zonas (escada do remo)
 
 
 PLACE_KINDS = {"restaurant": "restaurant", "fast_food_restaurant": "fast_food", "cafe": "cafe",

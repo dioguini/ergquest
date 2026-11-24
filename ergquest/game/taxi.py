@@ -40,6 +40,8 @@ class Passenger:
 
 
 def can_drive(vehicle: Vehicle, level: int, robustness: float) -> tuple[bool, str]:
+    """Licença. `level` é o nível NA MODALIDADE do veículo: ciclismo para o
+    riquexó, remo para o bote-táxi."""
     need_lvl, need_rob = LICENSES[vehicle.id]
     if level < need_lvl:
         return False, f"{vehicle.name}: precisa de nível {need_lvl}"

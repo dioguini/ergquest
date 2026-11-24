@@ -1,7 +1,14 @@
-"""Progressão: XP, níveis, reputação e desbloqueios.
+"""Progressão: XP, níveis, reputação e desbloqueios — por modalidade.
+
+Um atleta não tem de ter todos os ergómetros em casa, por isso cada
+modalidade evolui sozinha: ciclismo, corrida e remo têm o seu XP e o seu
+nível. Ciclismo e corrida partilham o mapa de terra (cada um com o que já
+abriu); o remo tem o mapa do rio. O ginásio não tem nível: dá Robustez, que
+vale para todos.
 
 O XP vem do esforço real (a carga TSS de qualquer sessão, livre ou missão)
-e do desempenho nas missões (estrelas). Nada disto mexe na velocidade.
+e do desempenho nas missões (estrelas), e vai para o desporto da sessão.
+Nada disto mexe na velocidade.
 """
 from __future__ import annotations
 
@@ -10,6 +17,8 @@ from dataclasses import dataclass, field
 from . import strength
 from .cities import CITIES, City
 
+SPORTS = ("bike", "run", "row")
+SPORT_NAMES = {"bike": "Ciclismo", "run": "Corrida", "row": "Remo"}
 XP_PER_TSS = 10.0
 XP_PER_STAR = 40.0
 
@@ -46,13 +55,13 @@ def session_xp(tss: float, stars: list[int], rob: float) -> int:
 
 @dataclass
 class Profile:
-    """Perfil único do atleta (uma conta, quatro modalidades)."""
+    """Perfil único do atleta (uma conta, quatro modalidades, três níveis)."""
     player_id: str
     weight_kg: float
     ftp_w: float = 200.0
     run_threshold_mps: float = 3.3
     row_ftp_w: float = 180.0
-    xp: float = 0.0
+    xp: dict[str, float] = field(default_factory=dict)       # XP por desporto
     robustness: float = 0.0
     ratings: list[int] = field(default_factory=list)
     abandons: int = 0
@@ -60,9 +69,22 @@ class Profile:
     home_city: str = "lisboa"
     jobs_done: dict[str, int] = field(default_factory=dict)   # por tipo de trabalho (food, chase, tour…)
 
+    def __post_init__(self) -> None:
+        if isinstance(self.xp, (int, float)):        # atalho: um número é XP de ciclismo
+            self.xp = {"bike": float(self.xp)}
+
+    def level_in(self, sport: str) -> int:
+        """Nível numa modalidade (o que abre o mapa desse desporto)."""
+        return level_for(self.xp.get(sport, 0.0), self.robustness)
+
+    @property
+    def levels(self) -> dict[str, int]:
+        return {s: self.level_in(s) for s in SPORTS}
+
     @property
     def level(self) -> int:
-        return level_for(self.xp, self.robustness)
+        """Nível de atleta: o mais alto das modalidades (cidades, desafios, licenças gerais)."""
+        return max(self.levels.values())
 
     @property
     def reputation(self) -> float:
@@ -71,9 +93,12 @@ class Profile:
         avg = sum(recent) / len(recent) if recent else 3.0
         return round(max(1.0, avg - 0.1 * self.abandons), 2)
 
-    def add_session(self, tss: float, stars: list[int]) -> int:
+    def add_session(self, tss: float, stars: list[int], sport: str = "bike") -> int:
+        """XP da sessão para o desporto dela (o ginásio não dá XP: dá Robustez)."""
+        if sport not in SPORTS:
+            raise ValueError(f"o XP é por modalidade de ergómetro: {SPORTS}")
         gained = session_xp(tss, stars, self.robustness)
-        self.xp += gained
+        self.xp[sport] = self.xp.get(sport, 0.0) + gained
         self.ratings.extend(stars)
         return gained
 
@@ -104,13 +129,15 @@ class Profile:
             return True
         return self.level >= c.unlock_level and self.active_weeks_last8 >= c.unlock_active_weeks
 
-    def access(self):
-        """O que o atleta pode usar no mapa da Área Metropolitana (zonas, pontes, travessias)."""
+    def access(self, sport: str = "bike"):
+        """O que o atleta pode usar no mapa desse desporto: terra (ciclismo/corrida) ou rio (remo)."""
         from ..world.access import Access
-        return Access.for_level(self.level)
+        return Access.for_level(self.level_in(sport), sport)
 
-    def zones_unlocked(self, city: City | str) -> list[str]:
+    def zones_unlocked(self, city: City | str, sport: str = "bike") -> list[str]:
+        """Zonas de terra abertas para um desporto (o rio do remo: `access("row")`)."""
         c = CITIES[city] if isinstance(city, str) else city
         if not self.city_unlocked(c):
             return []
-        return [z.id for z in c.zones if self.level >= z.unlock_level or z is c.zones[0]]
+        lvl = self.level_in(sport)
+        return [z.id for z in c.zones if lvl >= z.unlock_level or z is c.zones[0]]

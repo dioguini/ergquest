@@ -9,7 +9,14 @@ efeito colateral na forma real (a carga entra sempre no CTL/ATL/TSB):
   recados de NPCs, táxi. Dá estrelas, XP e desbloqueios.
 * **FREE** — andar no mundo sem compromisso (conta para a carga e o XP).
 
-Uma sessão = um desporto = um `.fit`. Trocar de desporto num ponto de troca
+Uma sessão = um desporto = um `.fit`.
+
+Ao começar, e a cada troca de desporto, verifica-se:
+1. se há aparelhos compatíveis ligados (rolo, passadeira, remo; banda
+   cardíaca se o atleta a exigir) — `devices.hub.check`;
+2. se o sítio onde se está pertence a uma zona aberta NESSE desporto: o mapa
+   muda com a troca (terra para ciclismo/corrida, rio para remo) e cada
+   desporto tem o seu nível. Trocar de desporto num ponto de troca
 fecha a sessão atual (a bicicleta fica guardada nesse ponto) e abre a
 seguinte depois de uma transição física (o atleta muda de máquina).
 """
@@ -61,9 +68,40 @@ class PlayerState:
     parked_bike: tuple[str, str] | None = None        # (cidade, zona) onde ficou a bicicleta
     current: Session | None = None
     history: list[Session] = field(default_factory=list)
+    devices_check: object | None = None                # resultado da última verificação de aparelhos
+
+    @property
+    def world_map(self) -> str:
+        """O mapa em uso: "terra" (ciclismo e corrida) ou "rio" (remo)."""
+        return "rio" if self.sport is Sport.ROW else "terra"
+
+    def map_zone(self, sport: Sport | None = None) -> str:
+        """A zona do sítio atual no mapa desse desporto (no rio: a zona do Tejo junto à doca)."""
+        from ..world import metro
+        sport = sport or self.sport
+        return metro.LAND_TO_ROW.get(self.zone, self.zone) if sport is Sport.ROW else self.zone
+
+    def _ready(self, sport: Sport, devices, profile, hr_required: bool) -> None:
+        if devices is not None:
+            from ..devices.hub import check
+            chk = check(sport.value, devices, hr_required)
+            if not chk.ok:
+                from ..devices.hub import SPORT_NAMES
+                raise SessionError(f"sem aparelho para {SPORT_NAMES[sport.value]}: liga {chk.missing_text()}")
+            self.devices_check = chk
+        if profile is not None and self.city == "lisboa":
+            from ..world import metro
+            zone = self.map_zone(sport)
+            acc = profile.access(sport.value)
+            known = zone in metro.ZONE or zone in metro.ROW_ZONE
+            if known and zone not in acc.zones:
+                z = metro.any_zone(zone)
+                raise SessionError(f"a zona {z.name} ainda está fechada para {sport.value} "
+                                   f"(nível {profile.level_in(sport.value)}; abre no {z.level})")
 
     def start(self, sport: Sport, now: float, mode: Mode = Mode.FREE,
-              training: TrainingSetup | None = None) -> Session:
+              training: TrainingSetup | None = None, devices=None, profile=None,
+              hr_required: bool = False) -> Session:
         if not sport.in_world:
             raise SessionError("o ginásio regista-se fora do mundo")
         if (mode is Mode.TRAINING) != (training is not None):
@@ -73,6 +111,10 @@ class PlayerState:
             raise SessionError("no mundo, o remo começa numa doca, junto ao rio")
         if self.current and self.current.ended_at is None:
             raise SessionError("já há uma sessão aberta")
+        if in_world:
+            self._ready(sport, devices, profile, hr_required)
+        elif devices is not None:
+            self._ready(sport, devices, None, hr_required)
         self.sport = sport
         self.current = Session(self.player_id, sport, self.city, self.zone, mode, now, training=training)
         return self.current
@@ -85,8 +127,14 @@ class PlayerState:
         self.history.append(s)
         return s
 
-    def swap(self, target: Sport, now: float, active_missions: int = 0) -> tuple[Session, Session]:
-        """Ponto de troca: fecha a sessão, guarda a bicicleta, abre a nova."""
+    def swap(self, target: Sport, now: float, active_missions: int = 0, devices=None, profile=None,
+             hr_required: bool = False) -> tuple[Session, Session]:
+        """Ponto de troca: verifica aparelhos e zona, fecha a sessão, guarda a bicicleta, abre a nova.
+
+        Com `devices`/`profile`, a troca só acontece se houver aparelho para o
+        novo desporto e se o sítio estiver numa zona aberta para ele. O mapa
+        passa a ser o do novo desporto (`world_map`).
+        """
         if self.current is None:
             raise SessionError("não há sessão aberta")
         if active_missions:
@@ -95,9 +143,10 @@ class PlayerState:
         if target is Sport.ROW:
             if not self.at_dock:
                 raise SessionError("o remo começa numa doca")
-        elif not can_swap_at_street(cur, target):
+        elif cur is not Sport.ROW and not can_swap_at_street(cur, target):
             raise SessionError(f"troca {cur.value}→{target.value} não é possível na rua")
+        self._ready(target, devices, profile, hr_required)          # antes de fechar a sessão atual
         old = self.end(now)
         if cur is Sport.BIKE:
             self.parked_bike = (self.city, self.zone)
-        return old, self.start(target, now)
+        return old, self.start(target, now, devices=devices, profile=profile, hr_required=hr_required)

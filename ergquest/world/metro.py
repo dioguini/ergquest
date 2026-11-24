@@ -50,7 +50,9 @@ class MetroZone:
     hue: int             # cor no mapa (graus HSL)
 
 
-# A ordem de desbloqueio é a ordem desta lista.
+# Dois mapas: TERRA (ciclismo e corrida, o mesmo mapa; cada desporto com o seu
+# nível) e RIO (remo, com a sua própria escada). A ordem de desbloqueio é a
+# ordem de cada lista.
 ZONES: tuple[MetroZone, ...] = (
     MetroZone("n-baixa", "Baixa", "norte", 1, 18),
     MetroZone("n-centro", "Centro", "norte", 3, 205),
@@ -73,8 +75,36 @@ BRIDGES = {   # id → (nome, (lat, lon) do meio)
     "ponte-vila-franca": ("Ponte Marechal Carmona", (38.9530, -8.9750)),
     "ponte-leziria": ("Ponte da Lezíria", (38.9330, -8.9530)),
 }
-# Remo entre margens: só para remadores experientes, com as duas zonas abertas.
-CROSSING_LEVEL = ZONE["s-sul"].level
+# ---------------------------------------------------------------- remo
+# O rio tem a sua escada: cada troço do Tejo segue a zona de terra ao lado,
+# mas abre com o nível de REMO. As travessias abrem com a primeira zona da
+# margem sul do rio — é aí que os pedidos podem ligar as duas margens.
+ROW_ZONES: tuple[MetroZone, ...] = (
+    MetroZone("r-baixa", "Tejo · Baixa", "norte", 1, 200),
+    MetroZone("r-centro", "Tejo · Centro", "norte", 3, 215),
+    MetroZone("r-este", "Tejo · Este", "norte", 6, 260),
+    MetroZone("r-oeste", "Tejo · Oeste", "norte", 9, 175),
+    MetroZone("r-sul-norte", "Tejo Sul · Norte", "sul", 12, 320),
+    MetroZone("r-sul-este", "Tejo Sul · Este", "sul", 15, 150),
+    MetroZone("r-sul-oeste", "Tejo Sul · Oeste", "sul", 18, 25),
+)
+ROW_ZONE = {z.id: z for z in ROW_ZONES}
+ROW_UNLOCK_ORDER = [z.id for z in ROW_ZONES]
+LAND_TO_ROW = {"n-baixa": "r-baixa", "n-centro": "r-centro", "n-este": "r-este", "n-norte": "r-este",
+               "n-oeste": "r-oeste", "s-norte": "r-sul-norte", "s-sul": "r-sul-norte",
+               "s-este": "r-sul-este", "s-oeste": "r-sul-oeste"}
+CROSSING_LEVEL = ROW_ZONE["r-sul-norte"].level
+
+LAND_SPORTS = ("bike", "run")
+
+
+def ladder(sport: str) -> tuple[MetroZone, ...]:
+    """A escada de zonas de um desporto: terra para ciclismo/corrida, rio para remo."""
+    return ROW_ZONES if sport == "row" else ZONES
+
+
+def any_zone(zid: str) -> MetroZone:
+    return ZONE.get(zid) or ROW_ZONE[zid]
 
 
 def _pip(lat: float, lon: float, poly: list[tuple[float, float]]) -> bool:
@@ -145,9 +175,14 @@ def land_edge_km(lat: float, lon: float) -> float | None:
 # Classes do Overture/OSM. Neste mundo reina o ciclismo e a corrida: as
 # autoestradas também contam. Na cidade de Lisboa entra tudo; fora dela, só a
 # rede principal (o resto da malha fica para os NPCs).
+# Ciclismo e corrida partilham o MESMO mapa de terra, e só em pavimento
+# (asfalto ou calçada): sem escadas, trilhos, caminhos de terra nem passeios
+# desenhados à parte (duplicariam as ruas). Ruas pedonais e praças entram.
 MAIN_CLASSES = {"motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "cycleway"}
-CITY_CLASSES = MAIN_CLASSES | {"residential", "living_street", "pedestrian", "footway", "steps", "service"}
-FOOT_ONLY = {"footway", "steps", "pedestrian"}
+CITY_CLASSES = MAIN_CLASSES | {"residential", "living_street", "pedestrian", "service"}
+EXCLUDED_CLASSES = {"steps", "footway", "path", "track", "bridleway", "unknown"}
+PAVED_SURFACES = {"paved", "paving_stones", "asphalt", "concrete", "sett", "cobblestone", "metal"}
+UNPAVED_SURFACES = {"unpaved", "dirt", "gravel", "ground", "grass", "sand", "wood", "compacted", "fine_gravel"}
 
 # ---------------------------------------------------------------- rio
 # Faixas de remo (lat, lon), a umas centenas de metros da margem.

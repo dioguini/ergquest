@@ -4,14 +4,17 @@
 
 Usa o grafo de `data/lisboa-metro.json.gz` (OpenStreetMap via Overture +
 altimetria Copernicus; para o refazer: `python tools/build_metro.py`).
-A Ana é nível 9: tem abertas a Baixa, o Centro, o Norte e o Este.
+Cada modalidade tem o seu nível. A Ana: ciclismo 9, corrida 4, remo 1; tem
+rolo e passadeira (Bluetooth) e banda cardíaca (ANT+), mas não tem remo.
 
 1. TREINO — 3 × 6′ a 95 % FTP, ERG desligado, no mundo: no Cais do Sodré a
    Ana vê os ramos reais da interseção, o jogo sugere o que encaixa nos
    blocos, e ela pedala a marginal com o declive real a chegar ao rolo.
 2. JOGO — entrega de comida de um restaurante (fictício, num sítio real) até
    ao Miradouro de Santa Luzia, pela rota do GPS.
-3. JOGO — recado ad-hoc a pé, com paragens em sítios reais de Alfama.
+3. TROCA + JOGO — em Santa Luzia troca para a corrida (o jogo verifica a
+   passadeira e o mapa passa a mostrar as zonas da corrida); tenta remar e
+   não pode (sem remo); faz um recado a pé em Alfama.
 4. JOGO — riquexó com dois passageiros da Praça do Comércio ao Castelo.
 5. EFEITO COLATERAL — carga, forma, XP e desbloqueios.
 6. LIVRE — a Ana pedala para oeste sem destino, chega ao limite da zona
@@ -36,7 +39,10 @@ from .shared import load, physics
 from .shared.movement import PEDICAB, Bike, Runner, ascent, distance
 from .training.setup import Branch, TrainingSetup, Venue, rank_branches, trainer_command
 from .training.workout import Step, Workout, WorkoutRunner
-from .game.progression import xp_for_level
+from .devices import sim as devsim
+from .devices.hub import available_sports, check
+from .game.progression import SPORT_NAMES, xp_for_level
+from .game.session import SessionError
 from .shared.movement import Rower
 from .world import metro
 from .world.access import Access
@@ -121,22 +127,30 @@ def main(seed: int = 7) -> dict:
     rng = random.Random(seed)
     city = City(CityGraph.load(DATA))
     today = date(2026, 11, 23)
-    ana = Profile("ana", weight_kg=64, ftp_w=230, run_threshold_mps=3.6, row_ftp_w=190, xp=3500,
-                  active_weeks_last8=6)
+    ana = Profile("ana", weight_kg=64, ftp_w=230, run_threshold_mps=3.6, row_ftp_w=190,
+                  xp={"bike": xp_for_level(9), "run": xp_for_level(4)}, active_weeks_last8=6)
+    ana_devices = [devsim.SMART_TRAINER, devsim.TREADMILL, devsim.HR_STRAP]
     gym = [strength.GymSession(today - timedelta(days=d), 45, with_hr=d % 2 == 0) for d in (2, 5, 9, 13, 16, 20)]
     ana.robustness = strength.robustness(gym, today)
     bike, run = Bike(ana.weight_kg, ana.ftp_w), Runner(ana.weight_kg, ana.run_threshold_mps)
     player = PlayerState("ana", "lisboa", "n-baixa")
-    city.access = ana.access()
+    city.access = ana.access("bike")
+    ana_bike_access = city.access
     loads: list[float] = []
     stars: list[int] = []
     st = city.g.stats()
     print(f"== ErgQuest · Área Metropolitana de Lisboa ({st['junctions']} interseções, {st['bike_km']:.0f} km de "
           f"estradas, {st['water_km']} km de rio, {st['docks']} docas)")
-    opened = ", ".join(metro.ZONE[z].name for z in metro.UNLOCK_ORDER if z in city.access.zones)
-    nxt = city.access.next_unlock()
-    print(f"   Ana · nível {ana.level} · Robustez {ana.robustness:.2f} · zonas abertas: {opened} · "
-          f"a seguir: {nxt[0]} (nível {nxt[1]})")
+    print(f"   Ana · Robustez {ana.robustness:.2f} · aparelhos: " + ", ".join(
+        f"{d.name} ({d.transport.upper()})" for d in ana_devices))
+    for sp in ("bike", "run", "row"):
+        acc = ana.access(sp)
+        zones = ", ".join(metro.any_zone(z).name for z in metro.ladder(sp) and [z.id for z in metro.ladder(sp)]
+                          if z in acc.zones)
+        nxt = acc.next_unlock()
+        ok = check(sp, ana_devices).ok
+        print(f"   {SPORT_NAMES[sp]:<9} nível {ana.level_in(sp):>2} · mapa {'rio' if sp == 'row' else 'terra'} · "
+              f"{zones} · a seguir {nxt[0]} (nível {nxt[1]}) · {'aparelho OK' if ok else 'sem aparelho'}")
 
     # ================================================================ 1. TREINO
     wo = Workout("3×6′ limiar", [Step("steady", 600, target_lo=60)]
@@ -159,7 +173,7 @@ def main(seed: int = 7) -> dict:
     lap = city.route(start, east, bike) + city.route(east, start, bike)
     print("  Volta:", " → ".join(street_names(city.g, lap)[:6]), "…")
     samples, t, cmds = [], 0.0, []
-    player.start(Sport.BIKE, 0.0, Mode.TRAINING, training=setup)
+    player.start(Sport.BIKE, 0.0, Mode.TRAINING, training=setup, devices=ana_devices, profile=ana)
     while t < wo.total_seconds:
         def train_watts(tt, g):
             return (runner.target_watts(tt) or ana.ftp_w * 0.5) * rng.uniform(0.96, 1.04)
@@ -186,8 +200,8 @@ def main(seed: int = 7) -> dict:
 
     # ================================================================ 2. JOGO: entrega
     print("\n[JOGO] Sem treino marcado: a Ana só quer jogar.")
-    player.start(Sport.BIKE, t, Mode.MISSION)
-    board = OrderBoard("ana", ana.level, lambda s, i: bike.speed_at(i, 0.0), ana.robustness,
+    player.start(Sport.BIKE, t, Mode.MISSION, devices=ana_devices, profile=ana)
+    board = OrderBoard("ana", ana.level_in("bike"), lambda s, i: bike.speed_at(i, 0.0), ana.robustness,
                        strength.max_cargo_kg(ana.robustness), movers={Sport.BIKE: bike, Sport.RUN: run})
     srcs = sources_for("lisboa", "n-baixa")
     food = ana.available_sources([s for s in srcs if s.kind is Kind.FOOD])[0]
@@ -212,11 +226,25 @@ def main(seed: int = 7) -> dict:
     tss2 = load.tss([s.power for s in s2], ana.ftp_w)
     loads.append(tss2)
     print(f"  ✔ {stars_txt(d.stars)} · {d.elapsed(t)/60:.1f} min · {d.detail['temperature_c']} °C · TSS {tss2:.0f}")
-    player.end(t)
 
     # ================================================================ 3. JOGO: recado
-    print("\n[JOGO] Em Santa Luzia, um NPC acena: recado a pé por Alfama.")
-    player.start(Sport.RUN, t, Mode.MISSION)
+    print("\n[TROCA] Em Santa Luzia, a Ana encosta a bicicleta e passa para a passadeira.")
+    player.swap(Sport.RUN, t, devices=ana_devices, profile=ana)
+    run_access = ana.access("run")
+    city.access = run_access
+    print(f"  ✔ {player.devices_check.summary()}")
+    print(f"  O mapa muda para o nível de corrida ({ana.level_in('run')}): zonas abertas " + ", ".join(
+        metro.ZONE[z].name for z in metro.UNLOCK_ORDER if z in run_access.zones)
+          + f" — o Norte e o Este, abertos no ciclismo, estão fechados a correr")
+    player.at_dock = True
+    try:
+        player.swap(Sport.ROW, t, devices=ana_devices, profile=ana)
+        swap_blocked = None
+    except SessionError as err:
+        swap_blocked = str(err)
+        print(f"  ✗ Trocar para o remo na doca: {swap_blocked}")
+    player.at_dock = False
+    print("\n[JOGO] Um NPC acena: recado a pé por Alfama.")
     here = city.junction("Miradouro de Santa Luzia", "run")
     home = city.junction("Largo do Chafariz de Dentro", "run")
     hx, hy = city.g.junctions[here].x, city.g.junctions[here].y
@@ -232,7 +260,7 @@ def main(seed: int = 7) -> dict:
         leg = city.route(chain[i], chain[i + 1], run)
         return city.where(chain[i + 1]), route_profile(city.g, leg)
 
-    offer = errands.make_offer("ana", 11, run, ana.level, route_for=route_for)
+    offer = errands.make_offer("ana", 11, run, ana.level_in("run"), route_for=route_for)
     print("  " + offer.summary().replace("\n", "\n  "))
     job = errands.accept(offer, t)
     intensity = offer.required_intensity * 1.08
@@ -253,16 +281,17 @@ def main(seed: int = 7) -> dict:
 
     # ================================================================ 4. JOGO: táxi
     print("\n[JOGO] Praça do Comércio: dois turistas querem ir ao Castelo de riquexó.")
-    ok, why = taxi.can_drive(PEDICAB, ana.level, ana.robustness)
-    print(f"  Licença de riquexó: {'sim' if ok else why}")
-    player.start(Sport.BIKE, t, Mode.MISSION)
+    city.access = ana_bike_access
+    ok, why = taxi.can_drive(PEDICAB, ana.level_in("bike"), ana.robustness)
+    print(f"  Licença de riquexó (nível de ciclismo {ana.level_in('bike')}): {'sim' if ok else why}")
+    player.start(Sport.BIKE, t, Mode.MISSION, devices=ana_devices, profile=ana)
     cab = Bike(ana.weight_kg, ana.ftp_w, PEDICAB)
     a, b = city.junction("Praça do Comércio", "bike"), city.junction("Castelo de São Jorge", "bike")
     r = city.route(a, b, cab, 140)
-    quote = taxi.make_offer("ana", 5, cab, ana.level, "Castelo de São Jorge", profile=route_profile(city.g, r))
+    quote = taxi.make_offer("ana", 5, cab, ana.level_in("bike"), "Castelo de São Jorge", profile=route_profile(city.g, r))
     print("  " + quote.summary().replace("\n", "\n  "))
     print("     GPS:", " → ".join(street_names(city.g, r)))
-    trip = taxi.accept(quote, t, ana.level, ana.robustness)
+    trip = taxi.accept(quote, t, ana.level_in("bike"), ana.robustness)
     target = cab.ftp_w * quote.required_intensity * 1.05
 
     def cab_watts(tt, g):
@@ -285,17 +314,21 @@ def main(seed: int = 7) -> dict:
     history[today] = sum(loads)
     p = load.pmc(history, today)
     before, after = p[-2], p[-1]
-    xp = ana.add_session(sum(loads), stars)
+    before_lv = dict(ana.levels)
+    xp_bike = ana.add_session(loads[0] + loads[1] + loads[3], [stars[0], stars[2]], sport="bike")
+    xp_run = ana.add_session(loads[2], [stars[1]], sport="run")
     print(f"\n[EFEITO COLATERAL] carga do dia {sum(loads):.0f} TSS "
-          f"(treino {loads[0]:.0f} + jogo {sum(loads[1:]):.0f})")
+          f"(treino {loads[0]:.0f} + jogo {sum(loads[1:]):.0f}) — a forma real é uma só")
     print(f"  Fitness CTL {before['ctl']:.0f}→{after['ctl']:.0f} · Fadiga ATL {before['atl']:.0f}→{after['atl']:.0f} · "
           f"Forma amanhã {after['ctl'] - after['atl']:+.0f} ({load.form_state(after['ctl'] - after['atl'])})")
-    print(f"  +{xp} XP → nível {ana.level} · restaurantes abertos: {ana.establishments_unlocked('food')}")
+    print(f"  Ciclismo +{xp_bike} XP (nível {before_lv['bike']}→{ana.level_in('bike')}) · Corrida +{xp_run} XP "
+          f"(nível {before_lv['run']}→{ana.level_in('run')}) · Remo sem sessões (nível {ana.level_in('row')})")
+    print(f"  Restaurantes abertos: {ana.establishments_unlocked('food')}")
     print(f"  Anti-cheat do treino: confiança {report.trust} · rankings {'OK' if report.ranked_ok else 'em revisão'}")
 
     # ================================================================ 6. LIVRE: o limite do mundo
     print("\n[LIVRE] A Ana pedala sem destino para oeste, pela marginal.")
-    ana_access = Access.for_level(9)
+    ana_access = ana_bike_access
     start = city.junction("Cais do Sodré", "bike")
     alges = city.junction("Algés", "bike", zone="n-oeste")
     towards = fastest_route(city.g, start, alges, bike, access=Access.everything())
@@ -314,11 +347,15 @@ def main(seed: int = 7) -> dict:
     free_km = nav.travelled_m / 1000
 
     # ================================================================ 7. EXPERIENTE: as duas margens
-    rui = Profile("rui", weight_kg=72, ftp_w=300, xp=xp_for_level(20), robustness=0.6)
-    rui_access = rui.access()
+    rui = Profile("rui", weight_kg=72, ftp_w=300, xp={"bike": xp_for_level(20), "row": xp_for_level(14)},
+                  robustness=0.6)
+    rui_devices = [devsim.SMART_TRAINER, devsim.ROWER, devsim.HR_STRAP]
+    rui_access, rui_row = rui.access("bike"), rui.access("row")
     rbike, rrow = Bike(rui.weight_kg, rui.ftp_w), Rower(rui.weight_kg, 260)
-    print(f"\n[EXPERIENTE] Rui · nível {rui.level} · pontes {'abertas' if cross_bank_allowed(rui.level, 'bike') else 'fechadas'} · "
-          f"remo entre margens {'aberto' if cross_bank_allowed(rui.level, 'row') else 'fechado'}")
+    print(f"\n[EXPERIENTE] Rui · ciclismo {rui.level_in('bike')} (pontes "
+          f"{'abertas' if cross_bank_allowed(rui.level_in('bike'), 'bike') else 'fechadas'}) · remo {rui.level_in('row')} "
+          f"(travessias {'abertas' if cross_bank_allowed(rui.level_in('row'), 'row') else 'fechadas'}) · "
+          f"pode: {', '.join(SPORT_NAMES[s] for s in available_sports(rui_devices))}")
     almada = city.junction("Almada", "bike", zone="s-norte")
     over = fastest_route(city.g, a, almada, rbike, 0.75, access=rui_access)
     prof = route_profile(city.g, over)
@@ -327,20 +364,20 @@ def main(seed: int = 7) -> dict:
           f"(a Ana, nível {ana.level}: {'pode' if fastest_route(city.g, a, almada, bike, access=ana_access) else 'não pode'})")
     dock = min((j for j in city.g.docks() if j.zone in ("n-baixa", "n-centro")),
                key=lambda j: (j.x - cx) ** 2 + (j.y - cy) ** 2)
-    dest = pick_destination(city.g, dock.id, "row", rui_access, random.Random(seed), 1500, 9000, other_bank=True)
+    dest = pick_destination(city.g, dock.id, "row", rui_row, random.Random(seed), 1500, 9000, other_bank=True)
     if dest is not None:
-        d_km = distances(city.g, dock.id, "row", rui_access)[dest] / 1000
-        rroute = fastest_route(city.g, dock.id, dest, rrow, 0.75, access=rui_access)
+        d_km = distances(city.g, dock.id, "row", rui_row)[dest] / 1000
+        rroute = fastest_route(city.g, dock.id, dest, rrow, 0.75, access=rui_row)
         cross = next((city.g.edges[e].lock for e, _ in rroute if city.g.edges[e].lock), "")
         print(f"  🚣 Passeio de margem a margem: doca em {metro.ZONE[dock.zone].name} → doca em "
               f"{metro.ZONE[city.g.junctions[dest].zone].name} ({city.where(dest)}), {d_km:.1f} km pelo rio, "
               f"pela travessia {metro.CROSSING_NAMES.get(cross, cross)}")
-    ana_cross = pick_destination(city.g, dock.id, "row", ana_access, random.Random(seed), 1500, 9000, other_bank=True)
-    print(f"  (para a Ana o mesmo pedido {'existe' if ana_cross else 'não aparece: só remo na sua margem'})")
+    print(f"  (a Ana nem pode remar: {swap_blocked})")
     print(f"\n  Dados: {city.g.attribution}")
     return {"loads": loads, "stars": stars, "trust": report.trust,
             "compliance": runner.overall_compliance(), "errand": res3["completed"], "taxi": res4["stars"],
-            "limit": limit, "free_km": free_km, "bridge": bridge, "cross_dest": dest}
+            "limit": limit, "free_km": free_km, "bridge": bridge, "cross_dest": dest,
+            "swap_blocked": swap_blocked, "levels": ana.levels}
 
 
 if __name__ == "__main__":

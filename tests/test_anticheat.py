@@ -74,3 +74,5 @@ class DemoTest(unittest.TestCase):
         self.assertIn("Zona Oeste", res["limit"])                # a sessão livre encontrou o limite
         self.assertEqual(res["bridge"], "Ponte 25 de Abril")
         self.assertIsNotNone(res["cross_dest"])
+        self.assertEqual(res["swap_blocked"], "sem aparelho para remo: liga um remo")
+        self.assertEqual((res["levels"]["bike"], res["levels"]["row"]), (10, 1))

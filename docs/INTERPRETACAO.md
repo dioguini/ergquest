@@ -163,7 +163,19 @@ anula o trabalho e custa reputação (mais se já levava a comida ou o passageir
 
 ---
 
-## 5. O mundo: a Área Metropolitana de Lisboa
+## 5. Progressão por modalidade
+Um atleta não é obrigado a ter todos os ergómetros em casa. Por isso:
+- ciclismo, corrida e remo têm **cada um o seu XP e o seu nível**; o XP de uma
+  sessão vai para o desporto dela;
+- ciclismo e corrida partilham o **mapa de terra** (a mesma escada de zonas, com
+  níveis separados); o remo tem o **mapa do rio** e a sua escada;
+- o ginásio não tem nível: dá Robustez, que vale para os três;
+- **a forma real é uma só:** a carga de todas as modalidades entra no mesmo
+  CTL/ATL/TSB;
+- ao começar e ao trocar de desporto, o jogo verifica os aparelhos ligados, e o
+  mapa passa para o do novo desporto (ver [MUNDO.md](MUNDO.md) §4).
+
+## 6. O mundo: a Área Metropolitana de Lisboa
 O mapa jogável é a Área Metropolitana inteira (ver [MUNDO.md](MUNDO.md)):
 - nove zonas que abrem por ordem, começando na Baixa;
 - as pontes, que abrem com a margem sul para os atletas com bastante nível;
@@ -177,7 +189,7 @@ Numa sessão livre, os limites aparecem como ruas bloqueadas, com meia-volta e
 regresso pelo GPS. Os estabelecimentos são fictícios e ficam em sítios reais.
 Londres e Nova Iorque ficam para depois, com o mesmo processo.
 
-## 6. Anti-cheat
+## 7. Anti-cheat
 Validação no servidor (`server/anticheat.py`), com cinco verificações:
 1. limites humanos de W/kg;
 2. coerência entre sensores (potência sem cadência, FC parada ou que não responde);
@@ -188,11 +200,12 @@ Validação no servidor (`server/anticheat.py`), com cinco verificações:
 O resultado é uma confiança por sessão. Uma sessão suspeita sai dos rankings
 e vai para revisão; nunca há ban automático.
 
-## 7. Decisões em aberto
+## 8. Decisões em aberto
 1. **Cliente gráfico:** recomendo Python/pyglet na fase 1. Mais tarde, um motor de jogo (Godot), com os sensores num processo Python local.
 2. **Navegador:** não recomendo. O Bluetooth do browser não tem ANT+ nem funciona em Safari ou Firefox.
 3. **Treino no ecrã dá XP?** Assumi que sim (pelo esforço). A alternativa é só o treino no mundo contar para o jogo.
 4. **Táxi a pé?** Assumi riquexó e bote-táxi. A corrida fica com recados e polícia.
+   A licença do riquexó usa o nível de ciclismo; a do bote-táxi, o de remo.
 5. **Registo do ginásio:** manual, importado (Garmin), ou ambos?
 6. **Modelo de negócio.**
 7. **Ordem de desbloqueio** (docs/MUNDO.md §1). Assumi Norte: Baixa → Centro →
@@ -200,3 +213,8 @@ e vai para revisão; nunca há ban automático.
    não estava na sequência pedida, e na margem sul foi pedida uma "zona centro"
    que não está entre as quatro zonas definidas. É uma lista em `metro.ZONES`:
    mudar a ordem é mudar uma linha.
+8. **Mesma escada para ciclismo e corrida.** Por ser o mesmo mapa, as zonas abrem
+   nos mesmos níveis nas duas modalidades. Se a corrida tiver de abrir mais cedo
+   (corre-se menos km por hora), é mudar os níveis numa lista.
+9. **Banda cardíaca:** recomendada em todas as modalidades e obrigatória só se o
+   atleta o escolher.

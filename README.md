@@ -18,7 +18,7 @@ entra na forma, na fadiga e no fitness (CTL/ATL/TSB).
 | [docs/CONCEITO.md](docs/CONCEITO.md) | O conceito original. |
 | [docs/INTERPRETACAO.md](docs/INTERPRETACAO.md) | Leitura crítica: a tese, as tensões do conceito e como as resolvemos, decisões em aberto. |
 | [docs/ARQUITETURA.md](docs/ARQUITETURA.md) | Cliente/servidor, rede, dados e componentes. |
-| [docs/MUNDO.md](docs/MUNDO.md) | O mapa: Área Metropolitana de Lisboa, zonas e ordem de desbloqueio, pontes, remo, serras, limites. |
+| [docs/MUNDO.md](docs/MUNDO.md) | O mundo: mapa de terra (ciclismo e corrida) e mapa do rio (remo), níveis por modalidade, aparelhos e troca de desporto, pontes, serras, limites. |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | Fases F0–F6. |
 
 ## Experimentar
@@ -31,18 +31,18 @@ python -m unittest discover -s tests -t .        # testes
 python tools/build_metro.py                      # refaz o mapa da Área Metropolitana (precisa de rede)
 ```
 
-A demo mostra um dia na Área Metropolitana de Lisboa (`data/lisboa-metro.json.gz`):
-1. **Treino** 3 × 6′ ao limiar, com ERG desligado e no mundo. No Cais do Sodré o
-   jogo avalia os ramos reais da interseção e sugere o que encaixa nos blocos.
-2. **Jogo**: uma entrega de comida.
-3. **Jogo**: um recado ad-hoc, com o plano mostrado antes de aceitar.
-4. **Jogo**: um riquexó com dois passageiros da Praça do Comércio ao Castelo, pela
-   rota do GPS (Madalena, Limoeiro, Rua de Santiago), onde a física muda.
-5. **Efeito colateral**: a carga, o CTL/ATL/TSB, o XP e os desbloqueios.
-6. **Livre**: a Ana pedala para oeste, chega ao limite da zona Oeste (ainda
-   fechada) e o GPS leva-a de volta.
-7. **Experiente**: o Rui (nível 20) leva uma entrega a Almada pela Ponte 25 de
-   Abril e aceita um passeio de remo de margem a margem.
+A demo mostra um dia na Área Metropolitana de Lisboa (`data/lisboa-metro.json.gz`).
+A Ana tem ciclismo 9, corrida 4 e remo 1, e tem rolo, passadeira e banda
+cardíaca, mas não tem remo:
+1. **Treino** 3 × 6′ ao limiar, com ERG desligado e no mundo.
+2. **Jogo**: uma entrega de comida de bicicleta.
+3. **Troca** para a corrida: o jogo verifica a passadeira e o mapa passa a ter
+   as zonas da corrida. Tenta remar e não pode, porque não tem remo. Faz um
+   recado a pé.
+4. **Jogo**: um riquexó com dois passageiros até ao Castelo.
+5. **Efeito colateral**: a forma real é uma só; o XP vai para cada modalidade.
+6. **Livre**: chega ao limite da zona Oeste e o GPS leva-a de volta.
+7. **Experiente**: o Rui (ciclismo 20, remo 14) atravessa a ponte e o rio.
 
 ## O que já existe
 
@@ -56,9 +56,10 @@ A demo mostra um dia na Área Metropolitana de Lisboa (`data/lisboa-metro.json.g
 | `ergquest/game/errands.py` | Recados ad-hoc de NPCs: plano antes de aceitar, paragens por ordem, prazo. |
 | `ergquest/game/taxi.py` | Táxi (riquexó, bote-táxi): passageiros na física, cotação, conforto, segurança, licença. |
 | `ergquest/game/rowing.py`, `chase.py` | Suavidade da remada; perseguição policial. |
-| `ergquest/game/strength.py`, `progression.py` | Robustez (buff do ginásio); XP, níveis, desbloqueios de zonas, cidades e estabelecimentos. |
+| `ergquest/game/strength.py`, `progression.py` | Robustez (buff do ginásio); XP e nível **por modalidade** (ciclismo, corrida, remo); desbloqueios de zonas, cidades e estabelecimentos. |
 | `ergquest/game/session.py`, `challenges.py`, `cities.py` | Modos de sessão, trocas de desporto, desafios PvP, catálogo de cidades, crits e velódromos. |
 | `ergquest/world/` | O mundo real: Área Metropolitana de Lisboa (OpenStreetMap + Copernicus) → grafo jogável com 9 zonas, pontes e travessias bloqueadas por nível, rede de remo com docas, estradas de ligação nas extremidades e duas serras; GPS pela física de cada atleta, limites, meia-volta e regresso; destinos nas duas margens para experientes; mapa interativo. |
+| `ergquest/devices/` | Bluetooth (FTMS, FC, potência, passada) e ANT+ (FE-C, FC, potência, passada): leitura, ERG e declive; o que cada desporto exige; verificação na troca de desporto. |
 | `ergquest/server/anticheat.py` | Validação da telemetria: limites humanos, coerência de sensores, bots, física. |
 
 ## Dados de mapa

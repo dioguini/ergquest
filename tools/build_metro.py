@@ -65,6 +65,20 @@ def main() -> None:
 
     rows = pq.read_table(RAW / "metro" / "segments.parquet").to_pylist()
     print(f"→ {len(rows)} segmentos ({time.time() - t0:.0f}s)")
+    # análise: o que sai do mapa de terra e porquê (km)
+    removed: dict[str, float] = {}
+    for r in rows:
+        if r.get("subtype") != "road" or not r.get("geometry"):
+            continue
+        cls, surf = r.get("class"), metrobuild.surfaces_of(r)
+        why = ("escadas" if cls == "steps" else "passeios à parte" if cls == "footway"
+               else "trilhos e caminhos" if cls in ("path", "track", "bridleway")
+               else "terra/gravilha" if surf & metro.UNPAVED_SURFACES else None)
+        if why:
+            pts = metrobuild.parse_wkb_linestring(r["geometry"])
+            km = sum(math.hypot((b[0] - a[0]) * 87.0, (b[1] - a[1]) * 111.3) for a, b in zip(pts, pts[1:]))
+            removed[why] = removed.get(why, 0.0) + km
+    print("  fora do mapa (km):", {k: round(v) for k, v in sorted(removed.items())})
     data, stubs = metrobuild.from_overture(rows)
     print(f"  {len(data.ways)} vias, {len(data.nodes)} nós, {len(stubs)} pontas soltas na extremidade")
     climbs = metrobuild.stitch_edges(data, stubs)
