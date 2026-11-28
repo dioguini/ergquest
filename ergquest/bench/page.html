@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Banco de testes ErgQuest</title>
+<style>
+/* barra de estado em cima; separadores; conteúdo; registo de eventos em baixo */
+:root{--bg:#f2f3f0;--panel:#ffffff;--fg:#1a1e1c;--muted:#5d6661;--line:#d9ddd8;--accent:#0f766e;--accent-fg:#ffffff;
+--ok:#15803d;--warn:#b45309;--bad:#b91c1c;--rec:#dc2626;--mono:ui-monospace,Consolas,"Cascadia Mono",monospace;
+--body:"Segoe UI",system-ui,-apple-system,sans-serif}
+@media (prefers-color-scheme:dark){:root{--bg:#111413;--panel:#1a1e1c;--fg:#e7eae7;--muted:#9aa39e;--line:#2c322f;
+--accent:#2dd4bf;--accent-fg:#06211e;--ok:#4ade80;--warn:#fbbf24;--bad:#f87171;--rec:#f87171;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 var(--body)}
+.wrap{max-width:1180px;margin:0 auto;padding:16px;display:grid;gap:14px}
+.bar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+h1{font-size:1.3rem;margin:0;font-weight:650}
+.pill{font-size:12px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.pill.rec{border-color:var(--rec);color:var(--rec);font-weight:600}
+.folder{font:12px var(--mono);color:var(--muted);word-break:break-all}
+nav{display:flex;flex-wrap:wrap;gap:6px}
+nav button{font:600 14px var(--body);padding:7px 13px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+nav button[aria-selected="true"]{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+section{display:none;gap:14px} section.on{display:grid}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:10px;min-width:0}
+.card h2{font-size:1rem;margin:0}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button.act{font:600 14px var(--body);padding:7px 13px;border-radius:8px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-fg);cursor:pointer}
+button.sec{font:500 14px var(--body);padding:6px 11px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--fg);cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input,select{font:14px var(--body);padding:6px 8px;border-radius:7px;border:1px solid var(--line);background:var(--panel);color:var(--fg)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:13px}
+.muted{color:var(--muted)} .mono{font-family:var(--mono);font-size:12.5px;word-break:break-all}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px;display:grid;gap:2px}
+.tile b{font-size:1.9rem;font-weight:650;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile span{color:var(--muted);font-size:12.5px}
+.tile b small{font-size:.5em;font-weight:500;color:var(--muted)}
+.ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px}
+.big{font-size:2.6rem;font-weight:650;font-variant-numeric:tabular-nums;line-height:1}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+details summary{cursor:pointer;color:var(--muted)}
+#events{max-height:220px;overflow:auto;font:12.5px var(--mono);white-space:pre-wrap;color:var(--muted)}
+.hint{color:var(--muted);font-size:13px;margin:0}
+.prompt{padding:8px 12px;border-radius:8px;border:1px solid var(--warn);color:var(--warn);font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="bar"><h1>Banco de testes ErgQuest</h1><span class="pill" id="backend">—</span><span class="pill" id="recpill">sem gravar</span>
+<span class="folder" id="folder"></span></div>
+<nav role="tablist">
+<button role="tab" data-t="devs" aria-selected="true">Aparelhos</button>
+<button role="tab" data-t="live" aria-selected="false">Em direto</button>
+<button role="tab" data-t="trainer" aria-selected="false">Rolo</button>
+<button role="tab" data-t="capture" aria-selected="false">Captura</button>
+<button role="tab" data-t="tread" aria-selected="false">Passadeira</button>
+<button role="tab" data-t="check" aria-selected="false">Verificação</button>
+</nav>
+
+<section id="devs" class="on">
+<div class="card"><h2>Procurar aparelhos</h2>
+<p class="hint">Liga o Bluetooth do PC. A Polar H10 só aparece com a banda vestida e húmida. Fecha outras apps ligadas aos aparelhos (Zwift, Wahoo, Decathlon/e-connected): cada aparelho aceita poucas ligações ao mesmo tempo.</p>
+<div class="row"><button class="act" id="scan">Procurar (6 s)</button><span class="muted" id="scanstate"></span></div>
+<div class="tablewrap"><table><thead><tr><th>Aparelho</th><th>Reconhecido como</th><th>Sinal</th><th>Endereço</th><th></th></tr></thead><tbody id="found"></tbody></table></div>
+</div>
+<div class="card"><h2>Ligados</h2><div id="linked" class="grid2"></div></div>
+</section>
+
+<section id="live">
+<div class="tiles" id="tiles"></div>
+<p class="hint">Com vários aparelhos, cada valor vem do mais fiável (potência dos pedais antes da do rolo; FC da banda antes da do aparelho). A origem aparece por baixo.</p>
+<div class="card"><h2>Por aparelho</h2><div class="tablewrap"><table><thead><tr><th>Aparelho</th><th>Leitura</th><th>Notificações</th><th>Últimos bytes</th></tr></thead><tbody id="perdev"></tbody></table></div></div>
+</section>
+
+<section id="trainer">
+<div class="card"><h2>Controlo do rolo (FTMS)</h2>
+<div class="row"><label for="tsel">Rolo</label><select id="tsel"></select><span class="muted" id="tstate"></span></div>
+<div class="grid2">
+<div class="card"><h2>ERG: o rolo impõe a potência</h2>
+<div class="row"><input type="number" id="watts" value="150" min="0" max="1500" step="5" style="width:110px"> W
+<button class="act" id="ergbtn">Aplicar ERG</button></div>
+<div class="chips"><button class="sec" data-w="100">100 W</button><button class="sec" data-w="150">150 W</button><button class="sec" data-w="200">200 W</button><button class="sec" data-w="250">250 W</button></div>
+<p class="hint">Pedala a uma cadência normal: a potência deve fixar-se no alvo em poucos segundos, mesmo mudando de cadência.</p></div>
+<div class="card"><h2>Simulação: o rolo sente o declive</h2>
+<div class="row"><input type="range" id="grade" min="-5" max="15" step="0.5" value="0" style="flex:1"><b id="gradeout">0.0 %</b>
+<button class="act" id="gradebtn">Aplicar declive</button></div>
+<div class="chips"><button class="sec" data-g="0">0 %</button><button class="sec" data-g="4">4 %</button><button class="sec" data-g="8">8 %</button><button class="sec" data-g="12">12 %</button></div>
+<p class="hint">Com o mesmo esforço, a 8 % deves sentir a resistência subir claramente e a velocidade cair.</p></div>
+</div>
+<div><b>Respostas do rolo</b><div id="resp" class="mono muted">—</div></div>
+</div>
+</section>
+
+<section id="capture">
+<div class="card"><h2>Gravar capturas</h2>
+<p class="hint">Grava os bytes de todas as notificações de todos os aparelhos ligados, com uma marca do que estás a fazer. É assim que se descodifica o protocolo do remo Domyos: remas em condições diferentes e marcas cada uma.</p>
+<div class="row"><button class="act" id="recbtn">Começar a gravar</button><span class="muted" id="recinfo"></span></div>
+<div class="row"><input id="marker" placeholder="ex.: resistência 5, ritmo 24 remadas/min" style="flex:1;min-width:240px"><button class="sec" id="markbtn">Marcar agora</button></div>
+<div class="chips" id="markchips"></div>
+</div>
+<div class="card"><h2>Enviar bytes a um aparelho (avançado)</h2>
+<p class="hint">Alguns aparelhos só enviam dados depois de um comando. Escolhe uma característica onde se pode escrever e envia bytes em hexadecimal. Fica tudo no registo.</p>
+<div class="row"><select id="wdev"></select><select id="wchar"></select></div>
+<div class="row"><input id="whex" class="mono" placeholder="ex.: f0 c8 01 b9" style="flex:1;min-width:200px">
+<label><input type="checkbox" id="wresp" checked> com resposta</label><button class="sec" id="wbtn">Enviar</button></div>
+</div>
+</section>
+
+<section id="tread">
+<div class="card"><h2>Passadeira manual (sem ligação)</h2>
+<p class="hint">Para passadeiras que não comunicam: indicas aqui a velocidade e a inclinação que puseste na passadeira. Os dados contam como <b>estimados</b>: valem para treino e níveis, ficam fora de rankings. Teclas com este separador aberto: ↑ ↓ velocidade (±0,5 km/h), ← → inclinação (±0,5 %).</p>
+<div class="row"><button class="act" id="tmon">Ligar passadeira manual</button><button class="sec" id="tmask">Simular pedido do jogo (14 km/h)</button><button class="sec" id="tmreset">Zerar distância</button></div>
+<div id="tmprompt"></div>
+<div class="grid2">
+<div class="card"><span class="muted">Velocidade</span><div class="big"><span id="tmspeed">0.0</span> <small>km/h</small></div>
+<div class="row"><button class="sec" data-ds="-0.5">−0,5</button><button class="sec" data-ds="0.5">+0,5</button>
+<input type="number" id="tmsetspeed" step="0.1" min="0" max="22" style="width:90px"><button class="sec" id="tmsetbtn">Definir</button></div></div>
+<div class="card"><span class="muted">Inclinação</span><div class="big"><span id="tmincl">0.0</span> <small>%</small></div>
+<div class="row"><button class="sec" data-di="-0.5">−0,5</button><button class="sec" data-di="0.5">+0,5</button></div></div>
+<div class="card"><span class="muted">Distância</span><div class="big"><span id="tmdist">0</span> <small>m</small></div></div>
+</div></div>
+</section>
+
+<section id="check">
+<div class="card"><h2>O que os aparelhos ligados permitem</h2>
+<p class="hint">É esta verificação que o jogo faz ao começar uma sessão e a cada troca de desporto.</p>
+<div class="tablewrap"><table><thead><tr><th>Modalidade</th><th>Estado</th><th>Aparelhos / em falta</th><th>Notas</th></tr></thead><tbody id="checks"></tbody></table></div>
+</div>
+</section>
+
+<div class="card"><details open><summary>Registo de eventos</summary><div id="events"></div></details></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const KIND={trainer:"rolo",power_meter:"medidor de potência",treadmill:"passadeira",footpod:"sensor de passada",rower:"remo",
+ heart_rate:"banda cardíaca",ftms:"máquina FTMS",domyos:"Domyos (protocolo próprio)"};
+const SPORT={bike:"Ciclismo",run:"Corrida",row:"Remo"};
+let S=null,tab="devs";
+async function post(path,body){const r=await fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body||{})});
+ const j=await r.json().catch(()=>({}));if(!r.ok)alert(j.error||"falhou");return j;}
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function put(el,html){if(el._h!==html){el.innerHTML=html;el._h=html;}}
+const kinds=k=>k&&k.length?k.map(x=>KIND[x]||x).join(", "):'<span class="muted">—</span>';
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.t;
+ document.querySelectorAll("nav button").forEach(x=>x.setAttribute("aria-selected",x===b));
+ document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id===tab));});
+$("found").addEventListener("click",async e=>{const b=e.target.closest("[data-c]");if(!b)return;
+ b.disabled=true;b.textContent="a ligar…";await post("/api/connect",{address:b.dataset.c});});
+$("linked").addEventListener("click",e=>{const b=e.target.closest("[data-d]");if(b)post("/api/disconnect",{address:b.dataset.d});});
+$("scan").onclick=async()=>{$("scan").disabled=true;$("scanstate").textContent="a procurar…";await post("/api/scan",{timeout:6});$("scan").disabled=false;$("scanstate").textContent="";};
+function render(){
+ if(!S)return;
+ $("backend").textContent=S.backend;$("folder").textContent="Gravações: "+S.folder;
+ $("recpill").textContent=S.recording.on?`● a gravar (${S.recording.rows})`:"sem gravar";$("recpill").classList.toggle("rec",S.recording.on);
+ const linked=new Set(S.links.map(l=>l.address));
+ put($("found"),S.found.map(d=>`<tr><td>${esc(d.name)||'<span class="muted">(sem nome)</span>'}</td><td>${kinds(d.kinds)}</td>
+  <td>${d.rssi??""} dBm</td><td class="mono">${esc(d.address)}</td>
+  <td>${linked.has(d.address)?'<span class="ok">ligado</span>':`<button class="sec" data-c="${esc(d.address)}">Ligar</button>`}</td></tr>`).join("")
+  ||'<tr><td colspan="5" class="muted">Ainda nada. Carrega em «Procurar».</td></tr>');
+ put($("linked"),S.links.map(l=>`<div class="card"><div class="row"><b>${esc(l.name)}</b>${l.estimated?'<span class="pill">dados estimados</span>':""}
+  <button class="sec" data-d="${esc(l.address)}" style="margin-left:auto">Desligar</button></div>
+  <div>${kinds(l.kinds)}${l.controllable?' · <span class="ok">controlável (ERG/declive)</span>':""}</div>
+  <div class="muted">${l.notifications} notificações</div>
+  <details><summary>${l.chars.length} características</summary><div class="mono">${l.chars.map(c=>`${c.uuid} [${c.props.join(", ")}]`).join("<br>")}</div></details></div>`).join("")
+  ||'<p class="muted">Nenhum aparelho ligado.</p>');
+ const L=S.live,src=L.sources||{};
+ const tile=(v,unit,label,key)=>`<div class="tile"><span>${label}</span><b>${v??"—"}${v!=null?` <small>${unit}</small>`:""}</b><span>${esc(src[key]||"")}</span></div>`;
+ put($("tiles"),tile(L.power_w!=null?Math.round(L.power_w):null,"W","Potência","power_w")+tile(L.cadence!=null?Math.round(L.cadence):null,"/min","Cadência","cadence")
+  +tile(L.speed_mps!=null?(L.speed_mps*3.6).toFixed(1):null,"km/h","Velocidade","speed_mps")+tile(L.hr_bpm,"bpm","Frequência cardíaca","hr_bpm")
+  +tile(L.distance_m!=null?Math.round(L.distance_m):null,"m","Distância","distance_m")+tile(L.stroke_count,"","Remadas","stroke_count"));
+ put($("perdev"),S.links.map(l=>`<tr><td>${esc(l.name)}</td><td class="mono">${esc(Object.entries(l.reading).map(([k,v])=>`${k}=${Array.isArray(v)?v.join("/"):v}`).join("  "))||"—"}</td>
+  <td>${l.notifications}</td><td class="mono">${esc(l.last_hex)}</td></tr>`).join("")||'<tr><td colspan="4" class="muted">Nenhum aparelho ligado.</td></tr>');
+ const ctl=S.links.filter(l=>l.controllable),sel=$("tsel"),cur=sel.value;
+ put(sel,ctl.map(l=>`<option value="${esc(l.address)}">${esc(l.name)}</option>`).join("")||'<option value="">(nenhum rolo controlável ligado)</option>');
+ if(ctl.some(l=>l.address===cur))sel.value=cur;
+ const t=ctl.find(l=>l.address===sel.value);$("tstate").textContent=t?(t.control?"controlo concedido":"sem controlo"):"";
+ $("resp").innerHTML=t&&t.responses.length?t.responses.map(esc).join("<br>"):"—";
+ $("recbtn").textContent=S.recording.on?"Parar gravação":"Começar a gravar";
+ $("recinfo").textContent=S.recording.on?`${S.recording.rows} notificações · marca atual: ${S.recording.marker||"(nenhuma)"}`:"";
+ const wd=$("wdev"),wdv=wd.value,wl=S.links.filter(l=>l.writable.length);
+ put(wd,wl.map(l=>`<option value="${esc(l.address)}">${esc(l.name)}</option>`).join("")||'<option value="">(nenhum)</option>');
+ if(wl.some(l=>l.address===wdv))wd.value=wdv;
+ const wc=$("wchar"),wcv=wc.value,wlink=wl.find(l=>l.address===wd.value);
+ put(wc,(wlink?wlink.writable:[]).map(u=>`<option>${u}</option>`).join(""));if(wlink&&wlink.writable.includes(wcv))wc.value=wcv;
+ const T=S.treadmill;$("tmon").textContent=T.on?"Desligar passadeira manual":"Ligar passadeira manual";
+ $("tmspeed").textContent=T.speed_kmh.toFixed(1);$("tmincl").textContent=T.incline_pct.toFixed(1);$("tmdist").textContent=T.distance_m;
+ put($("tmprompt"),T.prompt?`<div class="prompt">O jogo pede: ${esc(T.prompt)}</div>`:"");
+ put($("checks"),Object.entries(S.checks).map(([k,c])=>`<tr><td><b>${SPORT[k]}</b></td>
+  <td class="${c.ok?"ok":"bad"}">${c.ok?"pode jogar":"bloqueado"}</td><td>${esc(c.ok?c.summary:"falta "+c.missing)}</td>
+  <td>${c.warnings.map(esc).join("<br>")}${c.ok?`<br><span class="muted">ERG/declive: ${c.erg?"sim":"não"} · rankings: ${c.ranked?"sim":"não (estimado)"}</span>`:""}</td></tr>`).join(""));
+ const ev=$("events"),atBottom=ev.scrollTop+ev.clientHeight>=ev.scrollHeight-5;ev.textContent=S.events.join("\n");if(atBottom)ev.scrollTop=ev.scrollHeight;
+}
+$("ergbtn").onclick=()=>$("tsel").value&&post("/api/erg",{address:$("tsel").value,watts:+$("watts").value});
+document.querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{$("watts").value=b.dataset.w;$("ergbtn").click();});
+$("grade").oninput=()=>$("gradeout").textContent=(+$("grade").value).toFixed(1)+" %";
+$("gradebtn").onclick=()=>$("tsel").value&&post("/api/grade",{address:$("tsel").value,pct:+$("grade").value});
+document.querySelectorAll("[data-g]").forEach(b=>b.onclick=()=>{$("grade").value=b.dataset.g;$("grade").oninput();$("gradebtn").click();});
+$("recbtn").onclick=()=>post("/api/record",{on:!S.recording.on,marker:$("marker").value});
+$("markbtn").onclick=()=>$("marker").value&&post("/api/marker",{marker:$("marker").value});
+const MARKS=["parado","remada leve","remada forte","resistência 1","resistência 5","resistência 10","ritmo 20/min","ritmo 24/min","ritmo 28/min","sprint 10 remadas"];
+$("markchips").innerHTML=MARKS.map(m=>`<button class="sec" data-m="${m}">${m}</button>`).join("");
+document.querySelectorAll("[data-m]").forEach(b=>b.onclick=()=>{$("marker").value=b.dataset.m;$("markbtn").click();});
+$("wdev").onchange=render;
+$("wbtn").onclick=()=>$("wdev").value&&$("whex").value&&post("/api/write",{address:$("wdev").value,char:$("wchar").value,hex:$("whex").value,response:$("wresp").checked});
+const tm=(action,value)=>post("/api/treadmill",{action,value});
+$("tmon").onclick=()=>tm(S.treadmill.on?"off":"on");$("tmask").onclick=()=>tm("ask",14);$("tmreset").onclick=()=>tm("reset");
+document.querySelectorAll("[data-ds]").forEach(b=>b.onclick=()=>tm("nudge_speed",+b.dataset.ds));
+document.querySelectorAll("[data-di]").forEach(b=>b.onclick=()=>tm("nudge_incline",+b.dataset.di));
+$("tmsetbtn").onclick=()=>$("tmsetspeed").value!==""&&tm("speed",+$("tmsetspeed").value);
+document.addEventListener("keydown",e=>{if(tab!=="tread"||e.target.tagName==="INPUT")return;
+ const k={ArrowUp:["nudge_speed",.5],ArrowDown:["nudge_speed",-.5],ArrowRight:["nudge_incline",.5],ArrowLeft:["nudge_incline",-.5]}[e.key];
+ if(k){e.preventDefault();tm(...k);}});
+async function poll(){try{S=await (await fetch("/api/state")).json();render();}catch(e){$("backend").textContent="sem ligação ao programa";}
+ setTimeout(poll,500);}
+poll();
+</script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+# Banco de testes de aparelhos (Bluetooth no Windows, macOS e Linux)
+bleak==0.22.3

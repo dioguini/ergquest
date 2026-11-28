@@ -44,6 +44,20 @@ cardíaca, mas não tem remo:
 6. **Livre**: chega ao limite da zona Oeste e o GPS leva-a de volta.
 7. **Experiente**: o Rui (ciclismo 20, remo 14) atravessa a ponte e o rio.
 
+## Banco de testes de aparelhos (Windows)
+
+Para ligar e testar os aparelhos reais (rolo, banda cardíaca, remo) sem o jogo:
+duplo clique em **`bancada.bat`**. Abre uma página no browser com:
+- procura e ligação Bluetooth;
+- dados em direto;
+- ERG e declive do rolo;
+- gravação de capturas para protocolos próprios;
+- passadeira manual;
+- verificação por modalidade.
+
+O guia completo está em [docs/BANCADA.md](docs/BANCADA.md). Para experimentar sem
+aparelhos, usa `bancada-simulada.bat` (ou `python -m ergquest.bench --sim`).
+
 ## O que já existe
 
 | Módulo | O quê |
@@ -59,7 +73,8 @@ cardíaca, mas não tem remo:
 | `ergquest/game/strength.py`, `progression.py` | Robustez (buff do ginásio); XP e nível **por modalidade** (ciclismo, corrida, remo); desbloqueios de zonas, cidades e estabelecimentos. |
 | `ergquest/game/session.py`, `challenges.py`, `cities.py` | Modos de sessão, trocas de desporto, desafios PvP, catálogo de cidades, crits e velódromos. |
 | `ergquest/world/` | O mundo real: Área Metropolitana de Lisboa (OpenStreetMap + Copernicus) → grafo jogável com 9 zonas, pontes e travessias bloqueadas por nível, rede de remo com docas, estradas de ligação nas extremidades e duas serras; GPS pela física de cada atleta, limites, meia-volta e regresso; destinos nas duas margens para experientes; mapa interativo. |
-| `ergquest/devices/` | Bluetooth (FTMS, FC, potência, passada) e ANT+ (FE-C, FC, potência, passada): leitura, ERG e declive; o que cada desporto exige; verificação na troca de desporto. |
+| `ergquest/devices/` | Bluetooth (FTMS, FC, potência, passada) e ANT+ (FE-C, FC, potência, passada): leitura, ERG e declive; o que cada desporto exige; verificação na troca de desporto; adaptadores para aparelhos sem FTMS (remo Domyos, passadeira manual), com os dados estimados fora dos rankings. |
+| `ergquest/bench/` | Banco de testes de aparelhos: servidor local + página (Bluetooth real ou simulado), capturas para descodificar protocolos. |
 | `ergquest/server/anticheat.py` | Validação da telemetria: limites humanos, coerência de sensores, bots, física. |
 
 ## Dados de mapa

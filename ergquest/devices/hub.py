@@ -43,6 +43,7 @@ class Device:
     transport: str                     # "ble" | "ant" | "sim"
     address: str = ""                  # BLE: endereço; ANT+: número do dispositivo
     controllable: bool = False         # aceita ERG / simulação (rolo FTMS/FE-C, passadeira FTMS)
+    estimated: bool = False            # dados estimados (remo sem potência, passadeira manual): fora dos rankings
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ REQUIREMENTS = {
     "gym": Requirement(()),
 }
 SPORT_NAMES = {"bike": "ciclismo", "run": "corrida", "row": "remo", "gym": "ginásio"}
+TRANSPORT = {"ble": "Bluetooth", "ant": "ANT+", "manual": "sem ligação", "sim": "simulado"}
 
 
 @dataclass
@@ -75,6 +77,11 @@ class DeviceCheck:
         return " ou ".join(f"{art.get(m, 'um')} {m}" for m in self.missing)
 
     @property
+    def ranked(self) -> bool:
+        """Sessões com dados estimados contam para treino, XP e desbloqueios, mas não para rankings/PvP."""
+        return bool(self.ok and self.main and not self.main.estimated)
+
+    @property
     def erg_capable(self) -> bool:
         """Se o modo ERG (ou o declive do mapa no aparelho) está disponível."""
         return bool(self.main and self.main.controllable)
@@ -82,11 +89,16 @@ class DeviceCheck:
     def summary(self) -> str:
         if not self.ok:
             return f"{SPORT_NAMES[self.sport]}: falta {' ou '.join(self.missing)}"
-        parts = [f"{SPORT_NAMES[self.sport]}: {self.main.name} ({self.main.transport.upper()})" if self.main
-                 else SPORT_NAMES[self.sport]]
+        return " · ".join([self.using()] + self.warnings)
+
+    def using(self) -> str:
+        """Os aparelhos que a sessão vai usar (sem os avisos)."""
+        def label(d: Device) -> str:
+            return f"{d.name} ({TRANSPORT.get(d.transport, d.transport)})"
+        parts = [f"{SPORT_NAMES[self.sport]}: {label(self.main)}" if self.main else SPORT_NAMES[self.sport]]
         if self.hr:
-            parts.append(f"FC {self.hr.name} ({self.hr.transport.upper()})")
-        return " · ".join(parts + self.warnings)
+            parts.append(f"FC {label(self.hr)}")
+        return " · ".join(parts)
 
 
 def check(sport: str, devices: list[Device], hr_required: bool = False) -> DeviceCheck:
@@ -108,6 +120,8 @@ def check(sport: str, devices: list[Device], hr_required: bool = False) -> Devic
             warnings.append("sem banda cardíaca: a carga conta pela potência/ritmo")
     if main is not None and not main.controllable and sport in ("bike", "run"):
         warnings.append("sem controlo: ERG e declive do mapa indisponíveis no aparelho")
+    if main is not None and main.estimated:
+        warnings.append("dados estimados: conta para treino e níveis, fora de rankings e desafios")
     return DeviceCheck(sport, not missing, main, hr, missing, warnings)
 
 
@@ -147,20 +161,27 @@ class Hub:
     def __init__(self, devices: list[Device], clock=time.monotonic):
         self.devices = {d.id: d for d in devices}
         self.clock = clock
-        self._last: dict[str, tuple[float, Reading]] = {}
+        self._last: dict[str, dict[str, tuple[float, object]]] = {}   # aparelho → métrica → (t, valor)
         self.commands: list[tuple[str, str, float]] = []   # (aparelho, comando, valor) — registo
 
     def feed(self, device_id: str, reading: Reading) -> None:
-        self._last[device_id] = (self.clock(), reading)
+        """Junta a leitura às anteriores do mesmo aparelho, métrica a métrica (um rolo
+        pode mandar dados da máquina e de potência em notificações separadas)."""
+        now = self.clock()
+        slot = self._last.setdefault(device_id, {})
+        for metric in PRIORITY:
+            v = getattr(reading, metric)
+            if v is not None:
+                slot[metric] = (now, v)
 
     def live(self) -> Live:
         now = self.clock()
         out = Live(t=now)
         for metric, order in PRIORITY.items():
             for kind in order:
-                for dev_id, (t, r) in self._last.items():
+                for dev_id, slot in self._last.items():
                     d = self.devices.get(dev_id)
-                    v = getattr(r, metric)
+                    t, v = slot.get(metric, (-1e9, None))
                     if d and d.kind is kind and v is not None and now - t <= STALE_S:
                         setattr(out, metric, v)
                         out.sources[metric] = d.name

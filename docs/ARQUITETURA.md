@@ -135,6 +135,10 @@ ergquest/
     ant.py         ANT+: FE-C, FC, potência, passada; mensagens da antena USB; controlo
     hub.py         tipos, requisitos por desporto, verificação, junção das leituras
     sim.py         aparelhos simulados com os mesmos protocolos
+    adapters.py    passadeira manual, potência estimada do remo, Domyos (protocolo próprio)
+  bench/           BANCO DE TESTES (página local; docs/BANCADA.md)
+    core.py        estado e ações; backend.py Bluetooth real e simulado; recorder.py capturas
+    server.py      servidor local e API; page.html a página
   server/
     anticheat.py   validação da telemetria
   demo.py          um dia em Lisboa, sem hardware

@@ -141,6 +141,7 @@ class SwapTest(unittest.TestCase):
         with self.assertRaises(SessionError) as ctx:
             p.swap(Sport.RUN, 60, devices=[sim.SMART_TRAINER], profile=self.ana)
         self.assertIn("passadeira", str(ctx.exception))
+        self.assertIn("Rolo inteligente (Bluetooth)", check("bike", [sim.SMART_TRAINER]).using())
         self.assertIsNone(p.current.ended_at)                       # a sessão de bicicleta continua
         old, new = p.swap(Sport.RUN, 60, devices=[sim.SMART_TRAINER, sim.TREADMILL], profile=self.ana)
         self.assertEqual((old.sport, new.sport, p.world_map), (Sport.BIKE, Sport.RUN, "terra"))
@@ -161,3 +162,13 @@ class SwapTest(unittest.TestCase):
         p2.start(Sport.BIKE, 0, devices=[sim.SMART_TRAINER], profile=self.ana)
         with self.assertRaises(SessionError):                       # Tejo · Centro abre no nível 3 de remo
             p2.swap(Sport.ROW, 60, devices=[sim.ROWER], profile=self.ana)
+
+
+class MergeTest(unittest.TestCase):
+    def test_two_notifications_from_one_trainer_merge(self):
+        hub = Hub([sim.SMART_TRAINER], clock=lambda: 0.0)
+        hub.feed("sim-trainer", ble.parse_indoor_bike(sim.ftms_indoor_bike(9.0, 88, 240)))
+        hub.feed("sim-trainer", ble.parse_cycling_power(struct.pack("<Hh", 0, 238)))   # só potência
+        live = hub.live()
+        self.assertEqual((live.power_w, live.cadence), (238, 88))
+        self.assertAlmostEqual(live.speed_mps, 9.0, places=2)

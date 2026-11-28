@@ -52,6 +52,7 @@ class Session:
     distance_m: float = 0.0
     paused: bool = False
     training: TrainingSetup | None = None
+    ranked: bool = True                 # False com dados estimados (remo sem potência, passadeira manual)
 
     @property
     def in_world(self) -> bool:
@@ -111,12 +112,15 @@ class PlayerState:
             raise SessionError("no mundo, o remo começa numa doca, junto ao rio")
         if self.current and self.current.ended_at is None:
             raise SessionError("já há uma sessão aberta")
+        self.devices_check = None
         if in_world:
             self._ready(sport, devices, profile, hr_required)
         elif devices is not None:
             self._ready(sport, devices, None, hr_required)
         self.sport = sport
         self.current = Session(self.player_id, sport, self.city, self.zone, mode, now, training=training)
+        if self.devices_check is not None:
+            self.current.ranked = self.devices_check.ranked
         return self.current
 
     def end(self, now: float) -> Session:
