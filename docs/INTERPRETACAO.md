@@ -208,13 +208,11 @@ e vai para revisão; nunca há ban automático.
    A licença do riquexó usa o nível de ciclismo; a do bote-táxi, o de remo.
 5. **Registo do ginásio:** manual, importado (Garmin), ou ambos?
 6. **Modelo de negócio.**
-7. **Ordem de desbloqueio** (docs/MUNDO.md §1). Assumi Norte: Baixa → Centro →
-   Norte → Este → **Oeste**; depois Sul: Norte → Sul → Este → Oeste. O Oeste norte
-   não estava na sequência pedida, e na margem sul foi pedida uma "zona centro"
-   que não está entre as quatro zonas definidas. É uma lista em `metro.ZONES`:
-   mudar a ordem é mudar uma linha.
-8. **Mesma escada para ciclismo e corrida.** Por ser o mesmo mapa, as zonas abrem
+7. ~~Ordem de desbloqueio~~ — **fechada**: Norte (Baixa → Centro → Norte → Este →
+   Oeste), depois Sul (Norte → Sul → Este → Oeste). Está em `metro.ZONES`.
+8. **Mesma escada para ciclismo e corrida** — aceite. Por ser o mesmo mapa, as zonas abrem
    nos mesmos níveis nas duas modalidades. Se a corrida tiver de abrir mais cedo
    (corre-se menos km por hora), é mudar os níveis numa lista.
-9. **Banda cardíaca:** recomendada em todas as modalidades e obrigatória só se o
+9. **Banda cardíaca** — aceite: recomendada em todas as modalidades e obrigatória só se o
    atleta o escolher.
+10. **Tamanho dos mapas:** fica a Área Metropolitana inteira por agora; pode vir a ser reduzida.
